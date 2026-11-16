@@ -270,12 +270,12 @@ def test_two_interpreters_fires_and_the_fix_uses_the_declared_literal(repo):
                "```bash\n%s -m pytest tests/ -q\n```\n" % sys.executable)
     findings, _, _ = sword.detect_two_interpreters(repo)
     assert len(findings) == 1 and findings[0]["auto"]
-    assert findings[0]["detail"].endswith("python.exe")
+    assert findings[0]["detail"] == sys.executable
 
     ok, _note, touched = sword.apply_fix(repo, findings[0])
     assert ok and touched == "docs/run.md"
     text = path.read_text(encoding="utf-8")
-    assert "python -m pytest" not in text.replace("python.exe -m pytest", "")
+    assert not any(sword.BARE_PYTEST.search(line) for line in text.splitlines())
     after, _, _ = sword.detect_two_interpreters(repo)
     assert after == []
 
