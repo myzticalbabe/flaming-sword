@@ -209,10 +209,22 @@ ENV_DEFAULT = re.compile(r"os\.environ\.get\(\s*[\"']([A-Z][A-Z0-9_]{3,})[\"']\s
 #: `NAME = ...` (optionally annotated). A line that merely CONTAINS the call is
 #: not a definition, so it does not count as a source of the value.
 ENV_ASSIGN = re.compile(r"^\s*[A-Za-z_][A-Za-z0-9_]*\s*(?::[^=\n]+)?=\s*\S")
-BARE_PYTEST = re.compile(r"\bpython\s+-m\s+pytest\b")
+#: A bare `python -m pytest` is one with NO path in front of it. The `\b` anchor
+#: alone let every path-qualified interpreter match at its own `python` segment,
+#: so `/opt/hostedtoolcache/.../bin/python -m pytest` was reported as bare -- and
+#: the two-interpreters fix re-fired on the very line it had just rewritten,
+#: because the replacement still ended in `python -m pytest`. The lookbehind
+#: disqualifies a preceding path separator, dot or dash, which is exactly what
+#: distinguishes `./python` and `/venv/bin/python` from a genuinely bare `python`.
+BARE_PYTEST = re.compile(r"(?<![\w\\/.-])python\s+-m\s+pytest\b")
+# Any absolute interpreter path, not just a Windows or /usr one: a runner under
+# /opt/hostedtoolcache, a pyenv under /home/..., or a nix store path is the same
+# claim about which python a command means. Without this the detector saw no
+# declared interpreter at all on Linux, and stayed silent on the exact page it
+# exists to catch.
 EXPLICIT_INTERPRETER = re.compile(r"(?:[A-Za-z]:[\\/][^\s`]*python(?:\.exe)?"
-                                  r"|(?:^|[\s`])\.?\.?venvs?/[^\s`]*python"
-                                  r"|/usr/(?:local/)?bin/python)")
+                                  r"|(?:^|[\s`])\.?\.?(?:venvs?|envs?)/[^\s`]*python"
+                                  r"|(?:^|[\s`])/(?:[^\s`]*/)*bin/python[\d.]*)")
 FIGURE_WORDS = re.compile(r"\b\d{2,}(?:[,\s]\d{3})*\s+(?:gates?|tests?|books?|verses?|"
                           r"claims?|hooks?|checks?|files?)\b")
 TEST_INVOCATION = re.compile(r"\b(pytest|npm\s+test|yarn\s+test|go\s+test|cargo\s+test|"
