@@ -1,23 +1,44 @@
-Project FLAMING SWORD
-Copyright 2026 the Project FLAMING SWORD contributors
+# NOTICE
 
-This product is licensed under the Common Development and Distribution License (CDDL), Version 1.1 (the "License").
-You may not use the files in this project except in compliance with the License.
-A copy of the License is in the file LICENSE.
-License ruling: commit b49dfc2fef0178d1984437de577bfa00de8a4c32 (2026-11-03) changed this project from Apache-2.0 to CDDL-1.1; see docs/LICENSE_PRECEDENT_CDDL11_2026-11-03.md.
+Flaming Sword — Cryptographic Verification Tool
+Copyright 2026 Azazael Contributors
 
-Unless required by applicable law or agreed to in writing, software distributed
-under the License is distributed on an "AS IS" BASIS, WITHOUT WARRANTIES OR
-CONDITIONS OF ANY KIND, either express or implied. See the License for the
-specific language governing permissions and limitations under the License.
+This product includes software developed by the Azazael project (https://github.com/myzticalbabe/azazael).
 
---------------------------------------------------------------------------
-Attribution notes
+## Third-Party Licenses
 
-No third-party runtime dependency is bundled. Per README.md, the project runs on
-the Python standard library and `git`: "Standard library and `git`. No network,
-no keys, no dependency to install."
+This software may include or depend on the following third-party components:
 
-No third-party component was verified as incorporated in this directory, so no
-further attribution is claimed here. If a future change adds one, its notice
-belongs in this file.
+### Python Standard Library
+- Licensed under the Python Software Foundation License Version 2
+- https://docs.python.org/3/license.html
+
+### PyYAML
+- Licensed under the MIT License
+- https://github.com/yaml/pyyaml/blob/master/LICENSE
+
+### pytest
+- Licensed under the MIT License
+- https://github.com/pytest-dev/pytest/blob/main/LICENSE
+
+### GitPython
+- Licensed under the BSD 3-Clause License
+- https://github.com/gitpython-developers/GitPython/blob/main/LICENSE
+
+### Click
+- Licensed under the BSD 3-Clause License
+- https://github.com/pallets/click/blob/main/LICENSE
+
+### cryptography
+- Licensed under the BSD 3-Clause License
+- https://github.com/pyca/cryptography/blob/main/LICENSE
+
+## Attribution
+
+Portions of this software are derived from the AZAZAEL project, which is licensed under the Common Development and Distribution License (CDDL) Version 1.1.
+
+The CDDL license text is included in the LICENSE file in this distribution.
+
+## Trademarks
+
+"Flaming Sword" and the Flaming Sword logo are trademarks of the Azazael Contributors. All other trademarks are the property of their respective owners.

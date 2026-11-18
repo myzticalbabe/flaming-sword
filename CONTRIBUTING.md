@@ -1,70 +1,46 @@
-# Contributing to Project FLAMING SWORD
+# Contributing to Flaming Sword
 
-Thank you for considering a contribution to Project FLAMING SWORD!
+## How to Contribute
 
-## Quick Start
+### Reporting Issues
+- Use the bug report template (.github/ISSUE_TEMPLATE/bug_report.yml)
+- Include reproduction steps, expected vs actual behavior
+- Specify Python version, OS, and flaming-sword version
 
+### Pull Request Process
 1. Fork the repository
-2. Create a feature branch: `git checkout -b feature/your-change`
-3. Make your changes
-4. Run the test suite: `python -m pytest tests/ -v`
-5. Submit a pull request
+2. Create a feature branch from `main`
+3. Make your changes with tests
+4. Ensure all tests pass: `python -m pytest -v`
+5. Update CHANGELOG.md
+6. Submit PR with description of changes
 
-## Code Standards
+### Coding Conventions
+- **Stdlib-first**: Prefer stdlib over external dependencies
+- **Crypto/security focus**: Follow security best practices
+- **Docstrings**: All public methods must have docstrings with Args/Returns
+- **Type hints**: Use type annotations for all public APIs
 
-- **License**: All contributions must be compatible with CDDL-1.1 (the project license)
-- **Python**: 3.10+ (stdlib-only, no runtime dependencies)
-- **Dependencies**: Only stdlib and `git` executable
-- **Style**: Follow the existing code style in the repository
-- **Tests**: New functionality must include tests
-- **Documentation**: Update relevant docs (README.md) with your changes
+### Test Organization
+```
+tests/
+  test_crypto_*.py      # Cryptographic tests
+  test_verification_*.py # Verification tests
+  test_integrity_*.py   # Integrity tests
+```
 
-## What We Accept
+### Running Tests
+```bash
+# Run all tests
+python -m pytest tests/ -v
 
-- Bug fixes in the sweep tools (sword, defender, sentinel, memory_bridge, chain, housekeep)
-- New static analysis rules or fix patterns
-- Performance improvements
-- Documentation improvements
-- Test coverage improvements
+# Run with coverage
+python -m pytest --cov=flaming_sword tests/ -v
+```
 
-## What We Don't Accept
-
-- Changes that add runtime dependencies (FLAMING SWORD is stdlib-only by design)
-- Changes that require network access
-- Changes that break the `git` dependency assumption
-
-## The Six Tools
-
-Contributions should be aware of the six tools and their roles:
-
-- **sword** — Main sweep orchestrator
-- **defender** — Defense/protection analysis
-- **sentinel** — THE REAPER (monitoring)
-- **memory_bridge** — THE GRIMOIRE (memory integration)
-- **chain_server** — Chain/orchestration
-- **housekeep** — Maintenance/housekeeping
-- **disposition** — Ledger (internal, not a command)
-
-## Pull Request Process
-
-1. Ensure all tests pass
-2. The maintainers will review and merge
-
-## Reporting Issues
-
-Use the GitHub issue tracker. Please include:
-- Steps to reproduce
-- Expected vs actual behavior
-- Environment details (OS, Python version, git version)
-
-## Code of Conduct
-
-See [CODE_OF_CONDUCT.md](CODE_OF_CONDUCT.md)
-
-## Security
-
-See [SECURITY.md](SECURITY.md) for reporting security vulnerabilities.
-
-## License
-
-By contributing, you agree that your contributions will be licensed under CDDL-1.1.
+### Pull Request Checklist
+- [ ] Tests written and passing
+- [ ] Docstrings added for public APIs
+- [ ] Type hints added
+- [ ] CHANGELOG.md updated
+- [ ] No breaking changes without version bump

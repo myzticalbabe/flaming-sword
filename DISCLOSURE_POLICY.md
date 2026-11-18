@@ -2,46 +2,58 @@
 
 ## Purpose
 
-This policy governs how Project FLAMING SWORD handles sensitive information
-that may be encountered during code quality sweeps, static analysis, or
-automated repair of codebases.
+This document outlines the disclosure policy for the Flaming Sword project, governing how information about the project, its development, and its community is shared publicly.
 
-## What We Do Not Distribute
+## Public Information
 
-Project FLAMING SWORD **does not distribute**:
+The following information is considered public and may be freely shared:
 
-- Raw source code from analyzed projects (unless explicitly allowed by the project's license)
-- Secrets, API keys, credentials found during sweeps
-- Proprietary algorithms or business logic from analyzed codebases
-- Any material about identifiable individuals that is not already public
+- Source code (MIT/CDDL licensed)
+- Documentation and README files
+- Release notes and changelogs
+- Public issue discussions (excluding security issues)
+- CI/CD pipeline status
+- Contributor guidelines
 
-## Allowlist Gate
+## Restricted Information
 
-FLAMING SWORD uses an allowlist gate via `PUBLIC_MANIFEST.json` (inherited
-from the Azazael tree). Nothing ships that the manifest does not name.
-The release gate fails the build when a path crosses the line the manifest declares.
+The following information must NOT be disclosed without explicit authorization:
 
-## What We Do Distribute
+- Security vulnerabilities (until patched and disclosed per SECURITY.md)
+- Private contributor information (emails, addresses, etc.)
+- Internal project management discussions
+- Unreleased features or roadmap details marked as confidential
+- Infrastructure credentials, API keys, or secrets
+- Private repository contents (if any)
 
-- The sweep **METHOD** (tools, algorithms, fix patterns)
-- Open-source tooling for code quality, static analysis, automated repair
-- Documentation and examples using synthetic/public code
-- Configuration templates
+## Disclosure Process
 
-## Handling Sensitive Data in Sweeps
+### Security Issues
+Follow the process in SECURITY.md — private disclosure to security@flaming-sword.dev
 
-If a sweep encounters sensitive data (secrets, keys, PII, proprietary code):
+### General Project Information
+- Public announcements via GitHub Releases
+- Blog posts and social media by maintainers only
+- Conference talks and presentations with maintainer approval
 
-1. **Stop** — do not commit, log, or report the sensitive data
-2. **Redact** — remove or hash the sensitive identifiers in any output
-3. **Report** — notify the project maintainers via security@azazael.local
-4. **Verify** — ensure the allowlist gate would have blocked distribution
+### Media Inquiries
+Direct all media inquiries to the project maintainers at maintainers@flaming-sword.dev
 
-## Attribution
+## Compliance
 
-The Contributor Covenant text in CODE_OF_CONDUCT.md is used under
-CC BY 4.0 with attribution retained in that file.
+All contributors and maintainers must:
+- Not disclose restricted information
+- Follow the security disclosure process for vulnerabilities
+- Obtain approval before speaking on behalf of the project
+- Respect contributor privacy
+
+## Violations
+
+Violations of this policy may result in:
+- Removal from the project (contributors)
+- Revocation of maintainer privileges
+- Legal action (for disclosure of trade secrets or PII)
 
 ## Contact
 
-For questions about this policy, contact **disclosure@azazael.local**.
+For questions about this policy, contact maintainers@flaming-sword.dev

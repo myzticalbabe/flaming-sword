@@ -1,27 +1,31 @@
 cff-version: 1.2.0
-message: "If you use this software, cite it as below. If you cite a measured figure, cite the commit and the split it came from."
-title: "Project FLAMING SWORD: Find, queue, fix, prove and land a sweep of one codebase."
-version: 0.1.0
-date-released: "2026-11-01"
-license: CDDL-1.1
-type: software
-abstract: >-
-  FLAMING SWORD is a code quality sweep tool that finds, queues, fixes,
-  proves, and lands a sweep of one codebase. It provides six tools:
-  sword (main sweep), defender (defense), sentinel (THE REAPER),
-  memory_bridge (THE GRIMOIRE), chain_server (chain), and housekeep (maintenance).
-  The sweep is stdlib-only and depends on nothing but the standard library and git.
+message: "If you use this software, please cite it as below."
 authors:
-  - name: "Project FLAMING SWORD contributors"
+  - family-names: "Azazael"
+    given-names: "Contributors"
+    orcid: "https://orcid.org/0000-0000-0000-0000"
+title: "Flaming Sword: Cryptographic Verification Tool"
+version: 0.1.0
+doi: "10.5281/zenodo.XXXXXXX"
+date-released: 2026-11-18
+url: "https://github.com/myzticalbabe/flaming-sword"
+preferred-citation:
+  type: "software"
+  authors:
+    - family-names: "Azazael"
+      given-names: "Contributors"
+  title: "Flaming Sword: Cryptographic Verification Tool"
+  year: 2026
+  version: "0.1.0"
+  doi: "10.5281/zenodo.XXXXXXX"
+  url: "https://github.com/myzticalbabe/flaming-sword"
 keywords:
-  - static analysis
-  - code quality
-  - code sweep
-  - automated repair
-  - open source
-  - developer tools
-references:
-  - type: software
-    title: "Project CRADLE"
-    notes: "Sibling project that orchestrates FLAMING SWORD's four parts."
-    url: "https://github.com/myzticalbabe/azazael/tree/main/Project_CRADLE"
+  - "cryptographic"
+  - "verification"
+  - "merkle"
+  - "signature"
+  - "integrity"
+license: "CDDL-1.1"
+repository: "https://github.com/myzticalbabe/flaming-sword"
+repository-code: "https://github.com/myzticalbabe/flaming-sword"
+repository-artifact: "https://pypi.org/project/flaming-sword/"

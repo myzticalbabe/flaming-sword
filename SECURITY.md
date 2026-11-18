@@ -5,43 +5,36 @@
 | Version | Supported          |
 | ------- | ------------------ |
 | 0.1.x   | :white_check_mark: |
+| < 0.1   | :x:                |
 
 ## Reporting a Vulnerability
 
-**Do not report security vulnerabilities via public GitHub issues.**
+We take security vulnerabilities seriously. If you discover a security vulnerability in Flaming Sword, please report it responsibly:
 
-Instead, please report them via email to **security@azazael.local**.
+1. **Do not** create a public GitHub issue for the vulnerability
+2. Email the details to security@flaming-sword.dev
+3. Include:
+   - Description of the vulnerability
+   - Steps to reproduce
+   - Potential impact
+   - Any suggested fixes
 
-Include the following information:
+We will:
+- Acknowledge receipt within 48 hours
+- Provide a preliminary assessment within 5 business days
+- Keep you informed of progress
+- Credit you in the security advisory (unless you prefer anonymity)
 
-- Description of the vulnerability
-- Steps to reproduce
-- Potential impact
-- Any known workarounds
+## Security Best Practices
 
-We will acknowledge receipt within 48 hours and provide a status update
-within 5 business days.
-
-## Security Model
-
-FLAMING SWORD is a code quality sweep tool with the following security properties:
-
-1. **No runtime dependencies** — stdlib-only, only requires `git` executable
-2. **No network access** — FLAMING SWORD does not make network requests
-3. **No arbitrary code execution** — Does not eval or execute untrusted code
-4. **File system access** — Reads code for analysis, writes reports; does not execute analyzed code
-
-## Disclosure Policy
-
-We follow coordinated disclosure. Once a vulnerability is confirmed and a
-fix is available, we will:
-
-1. Release a patch
-2. Publish a security advisory
-3. Credit the reporter (unless they request anonymity)
+- Keep dependencies updated
+- Use `pip-audit` or `safety` to check for known vulnerabilities
+- Enable 2FA on your GitHub account
+- Never commit secrets or API keys
 
 ## Scope
 
-This policy covers the `tools/` directory within Project_FLAMING_SWORD,
-including all six tools (sword, defender, sentinel, memory_bridge, chain_server, housekeep)
-and the disposition ledger.
+This security policy applies to:
+- The flaming-sword package on PyPI
+- The GitHub repository at github.com/myzticalbabe/flaming-sword
+- All official distributions
