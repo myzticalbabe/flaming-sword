@@ -6,6 +6,7 @@ rule is tested as a refusal rather than trusted because it is written down: a
 tracked file, a symlink, and a path outside the root. Each of those must survive
 an `apply()`, not merely be excluded from a printed list.
 """
+
 import importlib.util
 import json
 import os
@@ -29,8 +30,9 @@ def repo(tmp_path):
     root = tmp_path / "repo"
     root.mkdir()
     subprocess.run(["git", "init", "-q"], cwd=str(root), check=True, timeout=120)
-    subprocess.run(["git", "config", "user.email", "t@example.invalid"], cwd=str(root),
-                   timeout=60)
+    subprocess.run(
+        ["git", "config", "user.email", "t@example.invalid"], cwd=str(root), timeout=60
+    )
     subprocess.run(["git", "config", "user.name", "t"], cwd=str(root), timeout=60)
     (root / sword.STATE_DIR).mkdir()
     return root
@@ -45,6 +47,7 @@ def _rules(items):
 
 
 # -- the deletes it is for ---------------------------------------------------
+
 
 def test_it_plans_caches_leftovers_and_empty_directories(repo):
     (repo / "pkg" / "__pycache__").mkdir(parents=True)
@@ -82,10 +85,15 @@ def test_apply_deletes_and_writes_the_deletion_log(repo):
     assert not (repo / "__pycache__").exists()
     log = repo / sword.STATE_DIR / "housekeep.jsonl"
     rows = [json.loads(line) for line in log.read_text(encoding="utf-8").splitlines()]
-    assert rows and rows[0]["path"] == "__pycache__" and rows[0]["rule"] == "bytecode-cache"
+    assert (
+        rows
+        and rows[0]["path"] == "__pycache__"
+        and rows[0]["rule"] == "bytecode-cache"
+    )
 
 
 # -- the three refusals ------------------------------------------------------
+
 
 def test_a_tracked_file_inside_a_cache_directory_is_never_deleted(repo):
     """The refusal that matters: git owns that file, so the whole directory stays."""
@@ -135,8 +143,10 @@ def test_git_being_unreadable_does_not_license_deleting_content(repo, monkeypatc
     items = housekeep.collect(repo)
     planned = _rules(items)
     assert ("bytecode-cache", "__pycache__", "delete") in planned
-    assert not any(rule == "editor-leftover" and action == "delete"
-                   for rule, _path, action in planned)
+    assert not any(
+        rule == "editor-leftover" and action == "delete"
+        for rule, _path, action in planned
+    )
     # Without a tracked set there is no untracked set either, so no size hazard
     # is invented: the tool does not guess what git would have said.
     assert not any(rule == "large-untracked" for rule, _path, _action in planned)
@@ -144,15 +154,31 @@ def test_git_being_unreadable_does_not_license_deleting_content(repo, monkeypatc
 
 # -- the hazards it reports and never removes --------------------------------
 
+
 def test_an_unlanded_batch_is_reported_and_kept(repo):
-    rows = [{"at": "2026-11-01T00:00:00Z", "fixed": ["a", "b"], "failed": [],
-             "touched": ["x.py"], "test": "pytest", "verified": "6 passed",
-             "landed": None},
-            {"at": "2026-11-02T00:00:00Z", "fixed": ["c"], "failed": [],
-             "touched": ["y.py"], "test": "pytest", "verified": "6 passed",
-             "landed": "abc1234"}]
+    rows = [
+        {
+            "at": "2026-11-01T00:00:00Z",
+            "fixed": ["a", "b"],
+            "failed": [],
+            "touched": ["x.py"],
+            "test": "pytest",
+            "verified": "6 passed",
+            "landed": None,
+        },
+        {
+            "at": "2026-11-02T00:00:00Z",
+            "fixed": ["c"],
+            "failed": [],
+            "touched": ["y.py"],
+            "test": "pytest",
+            "verified": "6 passed",
+            "landed": "abc1234",
+        },
+    ]
     (repo / sword.STATE_DIR / "batches.jsonl").write_text(
-        "".join(json.dumps(row) + "\n" for row in rows), encoding="utf-8")
+        "".join(json.dumps(row) + "\n" for row in rows), encoding="utf-8"
+    )
 
     items = housekeep.collect(repo)
     hazards = [item for item in items if item["rule"] == "unlanded-batch"]
@@ -177,7 +203,7 @@ def test_disposable_state_is_aged_out_but_the_landing_record_is_not(repo):
     state = repo / sword.STATE_DIR
     for name in ("findings.jsonl", "queue.jsonl"):
         (state / name).write_text("{}\n", encoding="utf-8")
-        os.utime(state / name, (0, 0))          # epoch: older than any threshold
+        os.utime(state / name, (0, 0))  # epoch: older than any threshold
     (state / "batches.jsonl").write_text("", encoding="utf-8")
     os.utime(state / "batches.jsonl", (0, 0))
 
@@ -185,7 +211,9 @@ def test_disposable_state_is_aged_out_but_the_landing_record_is_not(repo):
     planned = {item["path"] for item in items if item["rule"] == "sweep-state"}
     assert planned == {".flaming_sword/findings.jsonl", ".flaming_sword/queue.jsonl"}
     housekeep.apply(repo, items)
-    assert (state / "batches.jsonl").exists(), "the landing record is history, not garbage"
+    assert (
+        state / "batches.jsonl"
+    ).exists(), "the landing record is history, not garbage"
 
 
 def test_fresh_state_is_left_alone(repo):
@@ -196,6 +224,7 @@ def test_fresh_state_is_left_alone(repo):
 
 
 # -- the parent-directory direction -----------------------------------------
+
 
 def test_a_parent_is_only_called_empty_when_the_pass_would_really_empty_it(repo):
     """`pkg/` holds only a cache dir: after the pass it holds nothing, so it goes.

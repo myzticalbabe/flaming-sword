@@ -35,6 +35,7 @@ USAGE
 State lives in `.flaming_sword/` beside the repository under sweep: `findings.jsonl`,
 `queue.jsonl`, `batches.jsonl`. It is disposable: deleting it re-derives everything.
 """
+
 from __future__ import annotations
 
 import argparse
@@ -43,20 +44,19 @@ import hashlib
 import importlib.util
 import io
 import json
-import os
 import re
 import shlex
 import subprocess
 import sys
 import tempfile
 import time
-from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
 from typing import Dict, Iterable, List, Optional, Sequence, Tuple
 
 try:
     from CORE.failure_ledger import note_failure
-except ImportError:                               # never break the host
+except ImportError:  # never break the host
+
     def note_failure(where, exc=None):
         pass  # ledger missing; the swallow is still named at the call site
 
@@ -88,9 +88,16 @@ defender = _sibling("defender")
 memory_bridge = _sibling("memory_bridge")
 
 
-def cmd_aio(user_prompt: str, target: str, acceptance: str, evidence: str,
-            defends: Sequence[str], preserve: bool, jsonl: Optional[str],
-            as_json: bool) -> int:
+def cmd_aio(
+    user_prompt: str,
+    target: str,
+    acceptance: str,
+    evidence: str,
+    defends: Sequence[str],
+    preserve: bool,
+    jsonl: Optional[str],
+    as_json: bool,
+) -> int:
     """The whole product in one call: prompt -> frame -> sentinel -> memory -> AIO.
 
     Three checks, in this order, because each catches what the previous one cannot:
@@ -99,14 +106,22 @@ def cmd_aio(user_prompt: str, target: str, acceptance: str, evidence: str,
     says UNMEMORED when it could not ask). No AIO is printed unless all three pass, so a
     model is never handed an instruction object built on a hole.
     """
-    memory = memory_bridge.recall(user_prompt, jsonl=jsonl) if jsonl else \
-        memory_bridge.probe()
+    memory = (
+        memory_bridge.recall(user_prompt, jsonl=jsonl)
+        if jsonl
+        else memory_bridge.probe()
+    )
     result = defender.to_aio(
-        user_prompt, target=target, acceptance=acceptance, evidence=evidence,
+        user_prompt,
+        target=target,
+        acceptance=acceptance,
+        evidence=evidence,
         preserve=preserve,
         defends=defends,
         must_not_break=defender.default_break_list(target or "it"),
-        control=defender.default_control(user_prompt), memory=memory)
+        control=defender.default_control(user_prompt),
+        memory=memory,
+    )
     if as_json:
         print(json.dumps(result, indent=1, sort_keys=True))
         return 0 if result["state"].startswith("READY") else 1
@@ -122,8 +137,9 @@ def cmd_aio(user_prompt: str, target: str, acceptance: str, evidence: str,
     return 0
 
 
-def cmd_defend(intent: str, target: str, evidence: str, preserve: bool,
-               as_json: bool) -> int:
+def cmd_defend(
+    intent: str, target: str, evidence: str, preserve: bool, as_json: bool
+) -> int:
     """Print the defensive frame for a change; refuse a frame that is not one.
 
     This is the prompter, and it runs BEFORE the change so the frame cannot become a
@@ -167,8 +183,15 @@ def cmd_defend(intent: str, target: str, evidence: str, preserve: bool,
     return 0
 
 
-def record_error(root: Path, stage: str, kind: str, subject: str, what: str,
-                 evidence: str = "", remedy: str = "") -> Optional[Dict]:
+def record_error(
+    root: Path,
+    stage: str,
+    kind: str,
+    subject: str,
+    what: str,
+    evidence: str = "",
+    remedy: str = "",
+) -> Optional[Dict]:
     """Turn one error into one task, the moment it is found.
 
     A ledger that cannot be written must not take the sweep down with it, and it
@@ -178,34 +201,65 @@ def record_error(root: Path, stage: str, kind: str, subject: str, what: str,
     """
     with contextlib.suppress(OSError):
         return disposition.record(root, stage, kind, subject, what, evidence, remedy)
-    print("  WARNING: could not record this error in %s/%s" % (STATE_DIR, disposition.LEDGER))
+    print(
+        "  WARNING: could not record this error in %s/%s"
+        % (STATE_DIR, disposition.LEDGER)
+    )
     return None
+
+
 STATE_DIR = ".flaming_sword"
 
 #: Directories a sweep does not edit. Archives are history and vendored code is
 #: somebody else's tree: proposing edits there produces findings that can never be
 #: fixed, which is how a report becomes noise. Both are named rather than matched
 #: by pattern, so adding one is a decision somebody makes.
-SKIP_DIRS = {".git", "node_modules", "venv", "venvs", ".venv", ".venvs", "__pycache__",
-             "site-packages", "dist", "build", ".mypy_cache", ".pytest_cache", "logs",
-             "archive", "archived", "archived_unified", "nuitka_build_backup",
-             "inline_copy", "vendor", "third_party", ".agents", "skills.pkg-archive"}
+SKIP_DIRS = {
+    ".git",
+    "node_modules",
+    "venv",
+    "venvs",
+    ".venv",
+    ".venvs",
+    "__pycache__",
+    "site-packages",
+    "dist",
+    "build",
+    ".mypy_cache",
+    ".pytest_cache",
+    "logs",
+    "archive",
+    "archived",
+    "archived_unified",
+    "nuitka_build_backup",
+    "inline_copy",
+    "vendor",
+    "third_party",
+    ".agents",
+    "skills.pkg-archive",
+}
 MAX_MARKDOWN = 400
 MAX_PYTHON = 4000
 SEVERITY_ORDER = {"high": 0, "medium": 1, "low": 2}
 
 CODE_BLOCK_FENCE = re.compile(r"^\s*(```|~~~)")
-COMMAND_PATH = re.compile(r"\b(?:python3?|py|node|bash|sh|pwsh)\s+([A-Za-z0-9_./\\-]+"
-                          r"\.(?:py|js|mjs|sh|ps1|bat))")
+COMMAND_PATH = re.compile(
+    r"\b(?:python3?|py|node|bash|sh|pwsh)\s+([A-Za-z0-9_./\\-]+"
+    r"\.(?:py|js|mjs|sh|ps1|bat))"
+)
 TICK_PATH = re.compile(r"`([A-Za-z0-9_./\\-]+\.(?:py|js|mjs|sh|ps1|json|ya?ml|md))`")
-CONSTANT_ASSIGN = re.compile(r"^\s*([A-Z][A-Z0-9_]{3,})\s*=\s*(-?\d+(?:\.\d+)?)\s*(?:#.*)?$")
+CONSTANT_ASSIGN = re.compile(
+    r"^\s*([A-Z][A-Z0-9_]{3,})\s*=\s*(-?\d+(?:\.\d+)?)\s*(?:#.*)?$"
+)
 #: The shape this estate actually ships: `NAME = float(os.environ.get("NAME", "0.89"))`.
 #: A detector that only understood `NAME = 0.89` was blind to every floor, port and
 #: budget in the tree, because the canonical form of a tunable is an env default and
 #: not a bare assignment -- and a copy of that default in a second file is exactly
 #: the defect this detector exists for.
-ENV_DEFAULT = re.compile(r"os\.environ\.get\(\s*[\"']([A-Z][A-Z0-9_]{3,})[\"']\s*,\s*"
-                         r"[\"'](-?\d+(?:\.\d+)?)[\"']")
+ENV_DEFAULT = re.compile(
+    r"os\.environ\.get\(\s*[\"']([A-Z][A-Z0-9_]{3,})[\"']\s*,\s*"
+    r"[\"'](-?\d+(?:\.\d+)?)[\"']"
+)
 #: `NAME = ...` (optionally annotated). A line that merely CONTAINS the call is
 #: not a definition, so it does not count as a source of the value.
 ENV_ASSIGN = re.compile(r"^\s*[A-Za-z_][A-Za-z0-9_]*\s*(?::[^=\n]+)?=\s*\S")
@@ -222,35 +276,53 @@ BARE_PYTEST = re.compile(r"(?<![\w\\/.-])python\s+-m\s+pytest\b")
 # claim about which python a command means. Without this the detector saw no
 # declared interpreter at all on Linux, and stayed silent on the exact page it
 # exists to catch.
-EXPLICIT_INTERPRETER = re.compile(r"(?:[A-Za-z]:[\\/][^\s`]*python(?:\.exe)?"
-                                  r"|(?:^|[\s`])\.?\.?(?:venvs?|envs?)/[^\s`]*python"
-                                  r"|(?:^|[\s`])/(?:[^\s`]*/)*bin/python[\d.]*)")
-FIGURE_WORDS = re.compile(r"\b\d{2,}(?:[,\s]\d{3})*\s+(?:gates?|tests?|books?|verses?|"
-                          r"claims?|hooks?|checks?|files?)\b")
-TEST_INVOCATION = re.compile(r"\b(pytest|npm\s+test|yarn\s+test|go\s+test|cargo\s+test|"
-                             r"jest|vitest|tox|nox)\b")
+EXPLICIT_INTERPRETER = re.compile(
+    r"(?:[A-Za-z]:[\\/][^\s`]*python(?:\.exe)?"
+    r"|(?:^|[\s`])\.?\.?(?:venvs?|envs?)/[^\s`]*python"
+    r"|(?:^|[\s`])/(?:[^\s`]*/)*bin/python[\d.]*)"
+)
+FIGURE_WORDS = re.compile(
+    r"\b\d{2,}(?:[,\s]\d{3})*\s+(?:gates?|tests?|books?|verses?|"
+    r"claims?|hooks?|checks?|files?)\b"
+)
+TEST_INVOCATION = re.compile(
+    r"\b(pytest|npm\s+test|yarn\s+test|go\s+test|cargo\s+test|"
+    r"jest|vitest|tox|nox)\b"
+)
 #: A `run:` step that invokes a script in this repository. A ratchet gate is not
 #: a test suite, but it is also not "nothing": measured on the home tree, both
 #: workflows reported as untested run real gates (`check_no_catch_alls.py`,
 #: `anti_pattern_gate.py --check`, `canon_drift_check.py`) that can fail the build.
-GATE_INVOCATION = re.compile(r"\bpython3?\s+((?:tools|scripts|src)/[A-Za-z0-9_./-]+\.py)")
+GATE_INVOCATION = re.compile(
+    r"\bpython3?\s+((?:tools|scripts|src)/[A-Za-z0-9_./-]+\.py)"
+)
 
 
 # --------------------------------------------------------------------------- #
 # Findings
 # --------------------------------------------------------------------------- #
 
-def _finding(detector: str, path: Path, line: int, evidence: str, severity: str,
-             remedy: str, auto: bool = False, root: Optional[Path] = None,
-             detail: str = "") -> Dict:
+
+def _finding(
+    detector: str,
+    path: Path,
+    line: int,
+    evidence: str,
+    severity: str,
+    remedy: str,
+    auto: bool = False,
+    root: Optional[Path] = None,
+    detail: str = "",
+) -> Dict:
     rel = path
     if root is not None:
         try:
             rel = path.resolve().relative_to(root.resolve())
         except ValueError:
             rel = path
-    digest = hashlib.sha1(("%s|%s|%d|%s" % (detector, rel, line, evidence[:80]))
-                          .encode("utf-8")).hexdigest()[:12]
+    digest = hashlib.sha1(
+        ("%s|%s|%d|%s" % (detector, rel, line, evidence[:80])).encode("utf-8")
+    ).hexdigest()[:12]
     return {
         "id": "%s:%s" % (detector, digest),
         "detector": detector,
@@ -300,6 +372,7 @@ def code_block_lines(path: Path) -> Iterable[Tuple[int, str]]:
 # Detectors. Each returns (findings, ran: bool, note)
 # --------------------------------------------------------------------------- #
 
+
 def detect_phantom_reference(root: Path) -> Tuple[List[Dict], bool, str]:
     findings: List[Dict] = []
     for path in iter_files(root, "*.md", MAX_MARKDOWN):
@@ -322,12 +395,19 @@ def detect_phantom_reference(root: Path) -> Tuple[List[Dict], bool, str]:
                 # that are all correct -- precision is the whole value here.
                 if (path.parent / clean).exists() or (root / clean).exists():
                     continue
-                findings.append(_finding(
-                    "phantom-reference", path, number, line,
-                    "high",
-                    "replace `%s` with a command that exists, or delete the block "
-                    "(a reader copies this line and it fails)" % clean,
-                    root=root, detail=clean))
+                findings.append(
+                    _finding(
+                        "phantom-reference",
+                        path,
+                        number,
+                        line,
+                        "high",
+                        "replace `%s` with a command that exists, or delete the block "
+                        "(a reader copies this line and it fails)" % clean,
+                        root=root,
+                        detail=clean,
+                    )
+                )
     return findings, True, ""
 
 
@@ -353,7 +433,7 @@ def constant_values(line: str) -> List[Tuple[str, str]]:
         values.append((match.group(1), match.group(2)))
     # An env default only counts where the line IS an assignment. Without this
     # the pattern also matches its own test fixtures -- a test that writes
-    # `'FLOOR = float(os.environ.get("X", "0.70"))'` into a scratch file is 
+    # `'FLOOR = float(os.environ.get("X", "0.70"))'` into a scratch file is
     # test data, not a second copy of the setting, and reporting it is the false
     # positive that gets a watchlist abandoned.
     if ENV_ASSIGN.match(line):
@@ -376,9 +456,14 @@ def detect_duplicate_constant(root: Path) -> Tuple[List[Dict], bool, str]:
     """
     watch = [name for name in (read_config(root).get("constants") or [])]
     if not watch:
-        return [], False, ("no constants watchlist: declare `constants` in "
-                           "%s/config.json to say which values must be single-sourced"
-                           % STATE_DIR)
+        return (
+            [],
+            False,
+            (
+                "no constants watchlist: declare `constants` in "
+                "%s/config.json to say which values must be single-sourced" % STATE_DIR
+            ),
+        )
     seen: Dict[str, List[Tuple[Path, int, str, str]]] = {}
     for path in iter_files(root, "*.py", MAX_PYTHON):
         try:
@@ -397,16 +482,25 @@ def detect_duplicate_constant(root: Path) -> Tuple[List[Dict], bool, str]:
         values = {numeric_key(value) for _p, _n, value, _l in entries}
         if len(values) < 2:
             continue
-        where = "; ".join("%s:%d = %s" % (p.relative_to(root).as_posix(), n, v)
-                          for p, n, v, _l in entries[:6])
+        where = "; ".join(
+            "%s:%d = %s" % (p.relative_to(root).as_posix(), n, v)
+            for p, n, v, _l in entries[:6]
+        )
         first_path, first_line, _v, first_text = entries[0]
-        findings.append(_finding(
-            "duplicate-constant", first_path, first_line, first_text,
-            "high",
-            "%s holds %d different values (%s). Pick the source, import it in the "
-            "other file, and re-run whatever measured it -- two copies that agree "
-            "today disagree after the next edit" % (name, len(values), where),
-            root=root, detail=name))
+        findings.append(
+            _finding(
+                "duplicate-constant",
+                first_path,
+                first_line,
+                first_text,
+                "high",
+                "%s holds %d different values (%s). Pick the source, import it in the "
+                "other file, and re-run whatever measured it -- two copies that agree "
+                "today disagree after the next edit" % (name, len(values), where),
+                root=root,
+                detail=name,
+            )
+        )
     return findings, True, ""
 
 
@@ -415,22 +509,30 @@ def detect_hooks_unwired(root: Path) -> Tuple[List[Dict], bool, str]:
     if not hooks.is_dir():
         return [], True, "no .githooks directory: nothing to wire"
     try:
-        completed = subprocess.run(["git", "config", "core.hooksPath"],
-                                   cwd=str(root), capture_output=True, text=True,
-                                   timeout=30)
+        completed = subprocess.run(
+            ["git", "config", "core.hooksPath"],
+            cwd=str(root),
+            capture_output=True,
+            text=True,
+            timeout=30,
+        )
     except (OSError, subprocess.TimeoutExpired) as exc:
         return [], False, "git could not be run (%s)" % type(exc).__name__
     value = (completed.stdout or "").strip()
     if value in (".githooks", str(hooks)):
         return [], True, ""
     finding = _finding(
-        "hooks-unwired", root / ".githooks", 0,
+        "hooks-unwired",
+        root / ".githooks",
+        0,
         "core.hooksPath is %r" % (value or "unset"),
         "high",
         "git config core.hooksPath .githooks",
-        auto=True, root=root,
+        auto=True,
+        root=root,
         detail="tracked gates in .githooks never run; a clone runs whatever is in "
-               ".git/hooks, which is untracked and may be stale")
+        ".git/hooks, which is untracked and may be stale",
+    )
     return [finding], True, ""
 
 
@@ -445,8 +547,12 @@ def interpreter_can(interpreter: str, module: str) -> bool:
     key = (interpreter, module)
     if key not in _INTERPRETER_PROBE:
         try:
-            done = subprocess.run([interpreter, "-c", "import %s" % module],
-                                  capture_output=True, text=True, timeout=60)
+            done = subprocess.run(
+                [interpreter, "-c", "import %s" % module],
+                capture_output=True,
+                text=True,
+                timeout=60,
+            )
             _INTERPRETER_PROBE[key] = done.returncode == 0
         except (OSError, subprocess.TimeoutExpired):
             _INTERPRETER_PROBE[key] = False
@@ -479,12 +585,21 @@ def detect_two_interpreters(root: Path) -> Tuple[List[Dict], bool, str]:
             for number, line in code_block_lines(path):
                 if not BARE_PYTEST.search(line):
                     continue
-                findings.append(_finding(
-                    "two-interpreters", path, number, line, "medium",
-                    "this page names %d interpreters (%s): say which one the bare "
-                    "`python` means, and nothing here guesses between them"
-                    % (len(candidates), ", ".join(candidates[:4])),
-                    auto=False, root=root, detail="ambiguous"))
+                findings.append(
+                    _finding(
+                        "two-interpreters",
+                        path,
+                        number,
+                        line,
+                        "medium",
+                        "this page names %d interpreters (%s): say which one the bare "
+                        "`python` means, and nothing here guesses between them"
+                        % (len(candidates), ", ".join(candidates[:4])),
+                        auto=False,
+                        root=root,
+                        detail="ambiguous",
+                    )
+                )
             continue
         interpreter = candidates[0]
         usable = interpreter_can(interpreter, "pytest")
@@ -493,22 +608,40 @@ def detect_two_interpreters(root: Path) -> Tuple[List[Dict], bool, str]:
                 bare.append((number, line))
         for number, line in bare[:5]:
             if usable:
-                findings.append(_finding(
-                    "two-interpreters", path, number, line, "medium",
-                    "replace `python -m pytest` with `%s -m pytest`, or say that the "
-                    "bare `python` is the intended target" % interpreter,
-                    auto=True, root=root, detail=interpreter))
+                findings.append(
+                    _finding(
+                        "two-interpreters",
+                        path,
+                        number,
+                        line,
+                        "medium",
+                        "replace `python -m pytest` with `%s -m pytest`, or say that the "
+                        "bare `python` is the intended target" % interpreter,
+                        auto=True,
+                        root=root,
+                        detail=interpreter,
+                    )
+                )
             else:
                 # Measured: CAPABILITIES.md names exactly one interpreter
                 # (a `.pmb-venv` python) and it answers "No module named
                 # pytest". Rewriting the line to it would document a command
                 # that fails, so the fix is not offered at all.
-                findings.append(_finding(
-                    "two-interpreters", path, number, line, "medium",
-                    "the only interpreter this page names (%s) cannot import "
-                    "pytest, so it is not the one that runs this line: name the "
-                    "interpreter that does" % interpreter,
-                    auto=False, root=root, detail="interpreter-lacks-pytest"))
+                findings.append(
+                    _finding(
+                        "two-interpreters",
+                        path,
+                        number,
+                        line,
+                        "medium",
+                        "the only interpreter this page names (%s) cannot import "
+                        "pytest, so it is not the one that runs this line: name the "
+                        "interpreter that does" % interpreter,
+                        auto=False,
+                        root=root,
+                        detail="interpreter-lacks-pytest",
+                    )
+                )
     return findings, True, ""
 
 
@@ -523,7 +656,7 @@ def detect_untested_ci(root: Path) -> Tuple[List[Dict], bool, str]:
     for workflow in workflows:
         try:
             text = workflow.read_text(encoding="utf-8", errors="replace")
-        except OSError as exc:            # an unreadable workflow is not a clean one
+        except OSError as exc:  # an unreadable workflow is not a clean one
             note_failure("sword:ci_without_tests", exc)
             continue
         if TEST_INVOCATION.search(text):
@@ -538,20 +671,29 @@ def detect_untested_ci(root: Path) -> Tuple[List[Dict], bool, str]:
         # CI runs nothing", not "this CI does not spell pytest" -- and the
         # second one is how a working ratchet gets reported as a dead workflow,
         # which trains the reader to ignore the whole detector.
-        gates = [name for name in GATE_INVOCATION.findall(text) if (root / name).exists()]
+        gates = [
+            name for name in GATE_INVOCATION.findall(text) if (root / name).exists()
+        ]
         if gates:
             continue
-        findings.append(_finding(
-            "untested-ci", workflow, 1, "no test or gate invocation in this workflow",
-            "medium",
-            "add the step, or delete the workflow: a green CI that runs nothing "
-            "is worse than no CI", root=root))
+        findings.append(
+            _finding(
+                "untested-ci",
+                workflow,
+                1,
+                "no test or gate invocation in this workflow",
+                "medium",
+                "add the step, or delete the workflow: a green CI that runs nothing "
+                "is worse than no CI",
+                root=root,
+            )
+        )
     return findings, True, ""
 
 
 def detect_stale_claims(root: Path) -> Tuple[List[Dict], bool, str]:
     config = read_config(root)
-    claims = (config.get("claims") or {})
+    claims = config.get("claims") or {}
     command = claims.get("command")
     ledger = claims.get("ledger")
     if not command:
@@ -559,23 +701,46 @@ def detect_stale_claims(root: Path) -> Tuple[List[Dict], bool, str]:
         # "0 findings" from a detector that could not run is the exact sentence
         # this project exists to prevent -- it was reporting itself clean here
         # until 2026-11-01.
-        return [], False, ("no claims.command configured: nothing was run, so this "
-                           "is unknown, not clean")
+        return (
+            [],
+            False,
+            (
+                "no claims.command configured: nothing was run, so this "
+                "is unknown, not clean"
+            ),
+        )
     if ledger and not (root / ledger).exists():
         return [], False, "claims ledger %s is absent" % ledger
     try:
-        completed = subprocess.run([str(part) for part in command], cwd=str(root),
-                                   capture_output=True, text=True, timeout=600)
+        completed = subprocess.run(
+            [str(part) for part in command],
+            cwd=str(root),
+            capture_output=True,
+            text=True,
+            timeout=600,
+        )
     except (OSError, subprocess.TimeoutExpired) as exc:
         return [], False, "claims command could not run (%s)" % type(exc).__name__
     if completed.returncode == 0:
         return [], True, ""
     tail = ((completed.stdout or "") + (completed.stderr or "")).strip().splitlines()
     evidence = tail[-1] if tail else "exit %d" % completed.returncode
-    return [_finding("stale-claims", root / (ledger or "."), 0, evidence, "high",
-                     "fix the page or the code; never delete the claim to make the "
-                     "run green -- that is how a guide stops being checked",
-                     root=root)], True, ""
+    return (
+        [
+            _finding(
+                "stale-claims",
+                root / (ledger or "."),
+                0,
+                evidence,
+                "high",
+                "fix the page or the code; never delete the claim to make the "
+                "run green -- that is how a guide stops being checked",
+                root=root,
+            )
+        ],
+        True,
+        "",
+    )
 
 
 def detect_figure_without_command(root: Path) -> Tuple[List[Dict], bool, str]:
@@ -590,13 +755,20 @@ def detect_figure_without_command(root: Path) -> Tuple[List[Dict], bool, str]:
         for index, line in enumerate(lines):
             if not FIGURE_WORDS.search(line) or "`" in line:
                 continue
-            window = lines[max(0, index - 5): index + 6]
+            window = lines[max(0, index - 5) : index + 6]
             if any("`" in neighbour or "```" in neighbour for neighbour in window):
                 continue
-            findings.append(_finding(
-                "figure-without-command", path, index + 1, line, "low",
-                "cite the command that produced the figure, or drop the number",
-                root=root))
+            findings.append(
+                _finding(
+                    "figure-without-command",
+                    path,
+                    index + 1,
+                    line,
+                    "low",
+                    "cite the command that produced the figure, or drop the number",
+                    root=root,
+                )
+            )
             if len(findings) >= 50:
                 return findings, True, "capped at 50 findings"
     return findings, True, ""
@@ -664,12 +836,16 @@ def detect_compliance_matrix(root: Path) -> Tuple[List[Dict], bool, str]:
     """Check for required compliance matrix elements in the repository."""
     config = read_config(root)
     compliance_config = config.get("compliance", {})
-    required = compliance_config.get("required", list(COMPLIANCE_MATRIX_REQUIRED.keys()))
+    required = compliance_config.get(
+        "required", list(COMPLIANCE_MATRIX_REQUIRED.keys())
+    )
     optional = compliance_config.get("optional", [])
-    
-    all_checks = {**COMPLIANCE_MATRIX_REQUIRED}
+
+    _all_checks = {
+        **COMPLIANCE_MATRIX_REQUIRED
+    }  # snapshot kept for audit; findings built below
     findings: List[Dict] = []
-    
+
     # Check each required compliance item
     for check_name in required:
         if check_name not in COMPLIANCE_MATRIX_REQUIRED:
@@ -677,16 +853,22 @@ def detect_compliance_matrix(root: Path) -> Tuple[List[Dict], bool, str]:
         check = COMPLIANCE_MATRIX_REQUIRED[check_name]
         severity = check["severity"]
         description = check["description"]
-        
+
         if "file" in check:
             target = root / check["file"]
             if not target.exists():
-                findings.append(_finding(
-                    "compliance-matrix", root, 0,
-                    f"Missing required compliance element: {check_name}",
-                    severity,
-                    f"Add {check['file']}: {description}",
-                    root=root, detail=check_name))
+                findings.append(
+                    _finding(
+                        "compliance-matrix",
+                        root,
+                        0,
+                        f"Missing required compliance element: {check_name}",
+                        severity,
+                        f"Add {check['file']}: {description}",
+                        root=root,
+                        detail=check_name,
+                    )
+                )
         elif "pattern" in check:
             # Pattern-based check (e.g., license headers)
             found = False
@@ -699,13 +881,19 @@ def detect_compliance_matrix(root: Path) -> Tuple[List[Dict], bool, str]:
                     found = True
                     break
             if not found:
-                findings.append(_finding(
-                    "compliance-matrix", root, 0,
-                    f"Missing required compliance element: {check_name}",
-                    severity,
-                    f"Ensure {description}",
-                    root=root, detail=check_name))
-    
+                findings.append(
+                    _finding(
+                        "compliance-matrix",
+                        root,
+                        0,
+                        f"Missing required compliance element: {check_name}",
+                        severity,
+                        f"Ensure {description}",
+                        root=root,
+                        detail=check_name,
+                    )
+                )
+
     # Check optional items (low severity)
     for check_name in optional:
         if check_name not in COMPLIANCE_MATRIX_REQUIRED:
@@ -714,14 +902,24 @@ def detect_compliance_matrix(root: Path) -> Tuple[List[Dict], bool, str]:
         if "file" in check:
             target = root / check["file"]
             if not target.exists():
-                findings.append(_finding(
-                    "compliance-matrix", root, 0,
-                    f"Optional compliance element missing: {check_name}",
-                    "low",
-                    f"Consider adding {check['file']}: {check['description']}",
-                    root=root, detail=check_name))
-    
-    return findings, True, f"checked {len(required)} required, {len(optional)} optional compliance elements"
+                findings.append(
+                    _finding(
+                        "compliance-matrix",
+                        root,
+                        0,
+                        f"Optional compliance element missing: {check_name}",
+                        "low",
+                        f"Consider adding {check['file']}: {check['description']}",
+                        root=root,
+                        detail=check_name,
+                    )
+                )
+
+    return (
+        findings,
+        True,
+        f"checked {len(required)} required, {len(optional)} optional compliance elements",
+    )
 
 
 DETECTORS = (
@@ -740,6 +938,7 @@ DETECTORS = (
 # State
 # --------------------------------------------------------------------------- #
 
+
 def state_dir(root: Path) -> Path:
     path = root / STATE_DIR
     path.mkdir(parents=True, exist_ok=True)
@@ -757,8 +956,10 @@ def read_config(root: Path) -> Dict:
 
 
 def write_jsonl(path: Path, rows: Sequence[Dict]) -> None:
-    path.write_text("".join(json.dumps(row, ensure_ascii=False) + "\n" for row in rows),
-                    encoding="utf-8")
+    path.write_text(
+        "".join(json.dumps(row, ensure_ascii=False) + "\n" for row in rows),
+        encoding="utf-8",
+    )
 
 
 def read_jsonl(path: Path) -> List[Dict]:
@@ -785,24 +986,39 @@ def scan(root: Path, disabled: Sequence[str] = ()) -> Tuple[List[Dict], List[str
             continue
         try:
             produced, ran, note = detector(root)
-        except Exception as exc:                     # noqa: BLE001 - reported, never swallowed
+        except Exception as exc:  # noqa: BLE001 - reported, never swallowed
             unrun.append("%s: UNRUN (%s: %s)" % (name, type(exc).__name__, exc))
-            record_error(root, "scan", "detector-crashed", name,
-                         "%s raised %s: %s" % (name, type(exc).__name__, exc),
-                         evidence=repr(exc),
-                         remedy="fix the detector, or disable it explicitly in config")
+            record_error(
+                root,
+                "scan",
+                "detector-crashed",
+                name,
+                "%s raised %s: %s" % (name, type(exc).__name__, exc),
+                evidence=repr(exc),
+                remedy="fix the detector, or disable it explicitly in config",
+            )
             continue
         if not ran:
             unrun.append("%s: UNRUN (%s)" % (name, note or "no reason given"))
-            record_error(root, "scan", "detector-unrun", name,
-                         "%s could not run: %s" % (name, note or "no reason given"),
-                         remedy="supply what %s needs in %s/config.json, or say why it "
-                                "is off: %s"
-                                % (name, STATE_DIR, note or "no reason given"))
+            record_error(
+                root,
+                "scan",
+                "detector-unrun",
+                name,
+                "%s could not run: %s" % (name, note or "no reason given"),
+                remedy="supply what %s needs in %s/config.json, or say why it "
+                "is off: %s" % (name, STATE_DIR, note or "no reason given"),
+            )
             continue
         findings.extend(produced)
-    findings.sort(key=lambda f: (SEVERITY_ORDER.get(f["severity"], 9), f["detector"],
-                                 f["path"], f["line"]))
+    findings.sort(
+        key=lambda f: (
+            SEVERITY_ORDER.get(f["severity"], 9),
+            f["detector"],
+            f["path"],
+            f["line"],
+        )
+    )
     return findings, unrun
 
 
@@ -818,13 +1034,21 @@ def plan(root: Path) -> List[Dict]:
         if prior and prior.get("status") in ("fixed", "proposed", "skipped"):
             finding["status"] = prior["status"]
         queue.append(finding)
-    queue.sort(key=lambda row: (0 if row["status"] == "open" else 1,
-                                SEVERITY_ORDER.get(row["severity"], 9),
-                                0 if row["auto"] else 1, row["path"], row["line"]))
+    queue.sort(
+        key=lambda row: (
+            0 if row["status"] == "open" else 1,
+            SEVERITY_ORDER.get(row["severity"], 9),
+            0 if row["auto"] else 1,
+            row["path"],
+            row["line"],
+        )
+    )
     write_jsonl(state_dir(root) / "findings.jsonl", findings)
     write_jsonl(state_dir(root) / "queue.jsonl", queue)
     if unrun:
-        (state_dir(root) / "unrun.txt").write_text("\n".join(unrun) + "\n", encoding="utf-8")
+        (state_dir(root) / "unrun.txt").write_text(
+            "\n".join(unrun) + "\n", encoding="utf-8"
+        )
     return queue
 
 
@@ -837,11 +1061,24 @@ def apply_fix(root: Path, item: Dict) -> Tuple[bool, str, Optional[str]]:
     """
     if item["detector"] == "hooks-unwired":
         try:
-            subprocess.run(["git", "config", "core.hooksPath", ".githooks"],
-                           cwd=str(root), check=True, capture_output=True, timeout=30)
-        except (OSError, subprocess.CalledProcessError, subprocess.TimeoutExpired) as exc:
+            subprocess.run(
+                ["git", "config", "core.hooksPath", ".githooks"],
+                cwd=str(root),
+                check=True,
+                capture_output=True,
+                timeout=30,
+            )
+        except (
+            OSError,
+            subprocess.CalledProcessError,
+            subprocess.TimeoutExpired,
+        ) as exc:
             return False, "git config failed (%s)" % type(exc).__name__, None
-        return True, "core.hooksPath set to .githooks (local config: not landable)", None
+        return (
+            True,
+            "core.hooksPath set to .githooks (local config: not landable)",
+            None,
+        )
 
     if item["detector"] == "two-interpreters":
         interpreter = item.get("detail") or ""
@@ -852,35 +1089,58 @@ def apply_fix(root: Path, item: Dict) -> Tuple[bool, str, Optional[str]]:
         index = item["line"] - 1
         if index < 0 or index >= len(lines) or "python -m pytest" not in lines[index]:
             return False, "the line moved since the scan; re-run --plan", None
-        lines[index] = lines[index].replace("python -m pytest",
-                                            "%s -m pytest" % interpreter, 1)
+        lines[index] = lines[index].replace(
+            "python -m pytest", "%s -m pytest" % interpreter, 1
+        )
         target.write_text("\n".join(lines) + "\n", encoding="utf-8")
-        return True, "bare `python -m pytest` -> `%s -m pytest`" % interpreter, item["path"]
+        return (
+            True,
+            "bare `python -m pytest` -> `%s -m pytest`" % interpreter,
+            item["path"],
+        )
 
     return False, "no mechanical fixer for %s" % item["detector"], None
 
 
-def run_batch(root: Path, size: int, test_command: Optional[str],
-              dry_run: bool = False, parallel: bool = False) -> int:
+def run_batch(
+    root: Path,
+    size: int,
+    test_command: Optional[str],
+    dry_run: bool = False,
+    parallel: bool = False,
+) -> int:
     queue = read_jsonl(state_dir(root) / "queue.jsonl")
     open_items = [item for item in queue if item["status"] == "open"]
     batch = [item for item in open_items if item["auto"]][:size]
     proposed = [item for item in open_items if not item["auto"]]
 
     print("DECISION  run batch")
-    print("  batch:     %d auto-fixable item(s), %d propose-only left alone"
-          % (len(batch), len(proposed)))
-    print("  test:      %s" % (test_command or "NOT DECLARED (landing will be refused)"))
+    print(
+        "  batch:     %d auto-fixable item(s), %d propose-only left alone"
+        % (len(batch), len(proposed))
+    )
+    print(
+        "  test:      %s" % (test_command or "NOT DECLARED (landing will be refused)")
+    )
     print("  rollback:  git checkout -- <touched paths>")
     if parallel:
         print("  parallel:  enabled")
     print("")
     if not batch:
-        print("nothing auto-fixable in the queue. %d item(s) need a human decision:"
-              % len(proposed))
+        print(
+            "nothing auto-fixable in the queue. %d item(s) need a human decision:"
+            % len(proposed)
+        )
         for item in proposed[:12]:
-            print("  - [%s] %s:%d  %s" % (item["severity"], item["path"], item["line"],
-                                          item["remedy"].split("\n")[0][:110]))
+            print(
+                "  - [%s] %s:%d  %s"
+                % (
+                    item["severity"],
+                    item["path"],
+                    item["line"],
+                    item["remedy"].split("\n")[0][:110],
+                )
+            )
         if len(proposed) > 12:
             print("  ... and %d more" % (len(proposed) - 12))
         return 0
@@ -888,15 +1148,15 @@ def run_batch(root: Path, size: int, test_command: Optional[str],
     touched: List[str] = []
     applied: List[Dict] = []
     failed: List[Dict] = []
-    
+
     if parallel and len(batch) > 1:
         # Parallel execution for independent fixes
         from concurrent.futures import ThreadPoolExecutor, as_completed
-        
+
         def fix_item(item):
             ok, note, touched_path = apply_fix(root, item)
             return item, ok, note, touched_path
-        
+
         with ThreadPoolExecutor(max_workers=4) as executor:
             future_to_item = {executor.submit(fix_item, item): item for item in batch}
             for future in as_completed(future_to_item):
@@ -905,7 +1165,7 @@ def run_batch(root: Path, size: int, test_command: Optional[str],
                     item, ok, note, touched_path = future.result()
                 except Exception as exc:
                     ok, note, touched_path = False, f"exception: {exc}", None
-                
+
                 print("  %-4s %-34s %s" % ("fix" if ok else "FAIL", item["id"], note))
                 if ok:
                     item["status"] = "fixed"
@@ -914,10 +1174,16 @@ def run_batch(root: Path, size: int, test_command: Optional[str],
                         touched.append(touched_path)
                 else:
                     failed.append(item)
-                    record_error(root, "fix", "fix-failed", item["id"], note,
-                                 evidence="%s:%d %s" % (item["path"], item["line"],
-                                                        item["detector"]),
-                                 remedy=item.get("remedy", ""))
+                    record_error(
+                        root,
+                        "fix",
+                        "fix-failed",
+                        item["id"],
+                        note,
+                        evidence="%s:%d %s"
+                        % (item["path"], item["line"], item["detector"]),
+                        remedy=item.get("remedy", ""),
+                    )
     else:
         # Sequential execution (original behavior)
         touched: List[str] = []
@@ -925,7 +1191,9 @@ def run_batch(root: Path, size: int, test_command: Optional[str],
         failed: List[Dict] = []
         for item in batch:
             if dry_run:
-                print("  would fix %-34s %s:%d" % (item["id"], item["path"], item["line"]))
+                print(
+                    "  would fix %-34s %s:%d" % (item["id"], item["path"], item["line"])
+                )
                 continue
             ok, note, touched_path = apply_fix(root, item)
             print("  %-4s %-34s %s" % ("fix" if ok else "FAIL", item["id"], note))
@@ -936,10 +1204,16 @@ def run_batch(root: Path, size: int, test_command: Optional[str],
                     touched.append(touched_path)
             else:
                 failed.append(item)
-                record_error(root, "fix", "fix-failed", item["id"], note,
-                             evidence="%s:%d %s" % (item["path"], item["line"],
-                                                    item["detector"]),
-                             remedy=item.get("remedy", ""))
+                record_error(
+                    root,
+                    "fix",
+                    "fix-failed",
+                    item["id"],
+                    note,
+                    evidence="%s:%d %s"
+                    % (item["path"], item["line"], item["detector"]),
+                    remedy=item.get("remedy", ""),
+                )
 
     if failed:
         return 1
@@ -983,23 +1257,38 @@ def land(root: Path, test_command: Optional[str]) -> int:
     if not test_command:
         print("REFUSED: no --test command. A commit that fixes things without a")
         print("command that says the project still works is a claim, not a landing.")
-        record_error(root, "land", "refused", "no-test-command",
-                     "a landing was attempted with no verification command",
-                     remedy="pass --test with the project's own command")
+        record_error(
+            root,
+            "land",
+            "refused",
+            "no-test-command",
+            "a landing was attempted with no verification command",
+            remedy="pass --test with the project's own command",
+        )
         return 1
     batches = read_jsonl(state_dir(root) / "batches.jsonl")
     if not batches:
         print("REFUSED: no batch recorded. Run --run first.")
-        record_error(root, "land", "refused", "no-batch",
-                     "a landing was attempted with no batch on record",
-                     remedy="run --run to apply and record a batch first")
+        record_error(
+            root,
+            "land",
+            "refused",
+            "no-batch",
+            "a landing was attempted with no batch on record",
+            remedy="run --run to apply and record a batch first",
+        )
         return 1
     batch = batches[-1]
     if batch.get("landed"):
         print("REFUSED: batch already landed at %s" % batch["landed"])
-        record_error(root, "land", "refused", "already-landed",
-                     "the same batch was offered twice (landed at %s)" % batch["landed"],
-                     remedy="nothing to do: the batch is in history")
+        record_error(
+            root,
+            "land",
+            "refused",
+            "already-landed",
+            "the same batch was offered twice (landed at %s)" % batch["landed"],
+            remedy="nothing to do: the batch is in history",
+        )
         return 1
     touched = batch.get("touched") or []
     if not touched:
@@ -1007,9 +1296,14 @@ def land(root: Path, test_command: Optional[str]) -> int:
         print("What it changed was local git configuration (hooksPath), which no")
         print("commit records. Either re-run --scan so a file fix joins the batch,")
         print("or record the config change in the run report and land nothing.")
-        record_error(root, "land", "refused", "nothing-touched",
-                     "the batch changed only local git configuration",
-                     remedy="run a batch that edits a file, or record the config change")
+        record_error(
+            root,
+            "land",
+            "refused",
+            "nothing-touched",
+            "the batch changed only local git configuration",
+            remedy="run a batch that edits a file, or record the config change",
+        )
         return 1
 
     print("verifying: %s" % test_command)
@@ -1018,8 +1312,9 @@ def land(root: Path, test_command: Optional[str]) -> int:
     if not argv:
         print("REFUSED: the verification command is empty.")
         return 1
-    completed = subprocess.run(argv, cwd=str(root), capture_output=True, text=True,
-                               timeout=VERIFY_TIMEOUT)
+    completed = subprocess.run(
+        argv, cwd=str(root), capture_output=True, text=True, timeout=VERIFY_TIMEOUT
+    )
     elapsed = time.monotonic() - started
     tail = ((completed.stdout or "") + (completed.stderr or "")).strip().splitlines()
     summary = tail[-1] if tail else "no output"
@@ -1027,47 +1322,88 @@ def land(root: Path, test_command: Optional[str]) -> int:
     if completed.returncode != 0:
         print("\nREFUSED: the verification command failed. The batch is NOT landed.")
         print("Roll back or fix, then re-run. A red suite never lands.")
-        record_error(root, "land", "verification-red", "batch-%d" % len(batches),
-                     "the project's own command failed: %s" % summary.strip()[:200],
-                     evidence="%s -> exit %d" % (test_command, completed.returncode),
-                     remedy="roll back, or fix the cause; never land on red")
+        record_error(
+            root,
+            "land",
+            "verification-red",
+            "batch-%d" % len(batches),
+            "the project's own command failed: %s" % summary.strip()[:200],
+            evidence="%s -> exit %d" % (test_command, completed.returncode),
+            remedy="roll back, or fix the cause; never land on red",
+        )
         return 1
 
     batch_index = len(batches)
-    message = ("Fix %d finding(s) from a FLAMING SWORD sweep (batch %d)\n\n%s\n\n"
-               "Verified: %s -> %s"
-               % (len(batch.get("fixed") or []), batch_index,
-                  "\n".join("- " + item for item in (batch.get("fixed") or [])),
-                  test_command, summary.strip()[:200]))
-    staged = subprocess.run(["git", "add", "--", *touched], cwd=str(root),
-                            capture_output=True, text=True, timeout=120)
+    message = (
+        "Fix %d finding(s) from a FLAMING SWORD sweep (batch %d)\n\n%s\n\n"
+        "Verified: %s -> %s"
+        % (
+            len(batch.get("fixed") or []),
+            batch_index,
+            "\n".join("- " + item for item in (batch.get("fixed") or [])),
+            test_command,
+            summary.strip()[:200],
+        )
+    )
+    staged = subprocess.run(
+        ["git", "add", "--", *touched],
+        cwd=str(root),
+        capture_output=True,
+        text=True,
+        timeout=120,
+    )
     if staged.returncode != 0:
         print("REFUSED: git add failed: %s" % (staged.stderr or "").strip()[:200])
-        record_error(root, "land", "git-add-failed", "batch-%d" % len(batches),
-                     "git add refused the batch's touched paths",
-                     evidence=(staged.stderr or "").strip()[:300])
+        record_error(
+            root,
+            "land",
+            "git-add-failed",
+            "batch-%d" % len(batches),
+            "git add refused the batch's touched paths",
+            evidence=(staged.stderr or "").strip()[:300],
+        )
         return 1
     # The pathspec is not decoration: a plain `git commit` carries every staged
     # file, so an unrelated change somebody staged before the sweep would land
     # under this batch's message and its Verified: line.
-    commit = subprocess.run(["git", "commit", "-m", message, "--", *touched],
-                            cwd=str(root), capture_output=True, text=True, timeout=600)
+    commit = subprocess.run(
+        ["git", "commit", "-m", message, "--", *touched],
+        cwd=str(root),
+        capture_output=True,
+        text=True,
+        timeout=600,
+    )
     if commit.returncode != 0:
         print("REFUSED: git commit failed: %s" % (commit.stderr or "").strip()[:300])
         return 1
-    sha = subprocess.run(["git", "rev-parse", "--short", "HEAD"], cwd=str(root),
-                         capture_output=True, text=True, timeout=60).stdout.strip()
+    sha = subprocess.run(
+        ["git", "rev-parse", "--short", "HEAD"],
+        cwd=str(root),
+        capture_output=True,
+        text=True,
+        timeout=60,
+    ).stdout.strip()
     batch["landed"] = sha
     batch["verified"] = summary.strip()[:200]
     batches[-1] = batch
     write_jsonl(state_dir(root) / "batches.jsonl", batches)
-    print("landed batch %d as %s (not pushed: pushing is a separate, declared act)"
-          % (batch_index, sha))
+    print(
+        "landed batch %d as %s (not pushed: pushing is a separate, declared act)"
+        % (batch_index, sha)
+    )
     return 0
 
 
-RESEARCH_FIELDS = ("theme", "query", "url", "tier", "finding", "adaptation",
-                   "removes", "verify_command")
+RESEARCH_FIELDS = (
+    "theme",
+    "query",
+    "url",
+    "tier",
+    "finding",
+    "adaptation",
+    "removes",
+    "verify_command",
+)
 
 
 def record_research(root: Path, source: Path) -> int:
@@ -1102,8 +1438,12 @@ def record_research(root: Path, source: Path) -> int:
         if not str(record["url"]).startswith(("http://", "https://")):
             problems.append("line %d: url is not http(s)" % number)
             continue
-        record["id"] = "research:%s" % hashlib.sha1(
-            (record["theme"] + record["url"]).encode("utf-8")).hexdigest()[:12]
+        record["id"] = (
+            "research:%s"
+            % hashlib.sha1(
+                (record["theme"] + record["url"]).encode("utf-8")
+            ).hexdigest()[:12]
+        )
         record["detector"] = "research"
         record["severity"] = "low"
         record["auto"] = False
@@ -1111,9 +1451,11 @@ def record_research(root: Path, source: Path) -> int:
         record["path"] = record.get("removes", "")
         record["line"] = 0
         record["evidence"] = "[tier %s] %s" % (record["tier"], record["finding"][:200])
-        record["remedy"] = ("%s | replaces: %s | verify: %s"
-                            % (record["adaptation"], record["removes"],
-                               record["verify_command"]))
+        record["remedy"] = "%s | replaces: %s | verify: %s" % (
+            record["adaptation"],
+            record["removes"],
+            record["verify_command"],
+        )
         accepted.append(record)
     if problems:
         print("REFUSED: %d record(s) failed validation:" % len(problems))
@@ -1129,9 +1471,14 @@ def record_research(root: Path, source: Path) -> int:
     tiers: Dict[str, int] = {}
     for record in accepted:
         tiers[record["tier"]] = tiers.get(record["tier"], 0) + 1
-    print("%d research record(s) accepted (%s), %d newly queued as proposals."
-          % (len(accepted), ", ".join("tier %s: %d" % (t, n) for t, n in sorted(tiers.items())),
-             len(added)))
+    print(
+        "%d research record(s) accepted (%s), %d newly queued as proposals."
+        % (
+            len(accepted),
+            ", ".join("tier %s: %d" % (t, n) for t, n in sorted(tiers.items())),
+            len(added),
+        )
+    )
     print("They are PROPOSALS: --run never applies them, and tier D may not license")
     print("a change to code that currently works.")
     return 0
@@ -1150,8 +1497,10 @@ def brief() -> int:
         print("   rule: %s" % block.get("rule", ""))
         print("")
     followups = protocol.get("followups", {})
-    print("-- followups: exactly %d (the baker's dozen), %s"
-          % (followups.get("count", 13), followups.get("shape", "")))
+    print(
+        "-- followups: exactly %d (the baker's dozen), %s"
+        % (followups.get("count", 13), followups.get("shape", ""))
+    )
     for slot in followups.get("mandatory", []):
         print("   slot %-2s %s" % (slot.get("slot", "?"), slot.get("card", "")))
         print("            %s" % slot.get("prompt", ""))
@@ -1161,19 +1510,29 @@ def brief() -> int:
         print("   forbidden: %s" % forbidden)
     print("   %s" % followups.get("counting_rule", ""))
     print("")
-    print("-- stages: %s" % " -> ".join(stage["id"] for stage in
-                                        sorted(spec.get("stages", []),
-                                               key=lambda s: s["order"])))
+    print(
+        "-- stages: %s"
+        % " -> ".join(
+            stage["id"]
+            for stage in sorted(spec.get("stages", []), key=lambda s: s["order"])
+        )
+    )
     ledger = protocol.get("disposition", {})
     print("-- errors: %s" % ledger.get("rule", ""))
     print("   captured: %s" % ", ".join(ledger.get("captured", [])[:3]) + " ...")
-    print("   --tasks to read them, --dispose <id> --as <%s> to close one"
-          % "|".join(ledger.get("dispositions", disposition.DISPOSITIONS)))
+    print(
+        "   --tasks to read them, --dispose <id> --as <%s> to close one"
+        % "|".join(ledger.get("dispositions", disposition.DISPOSITIONS))
+    )
     print("")
-    house = next((stage for stage in spec.get("stages", [])
-                  if stage.get("id") == "housekeep"), None)
-    print("-- housekeep: dry run unless --apply; %s"
-          % (house.get("does", "") if house else ""))
+    house = next(
+        (stage for stage in spec.get("stages", []) if stage.get("id") == "housekeep"),
+        None,
+    )
+    print(
+        "-- housekeep: dry run unless --apply; %s"
+        % (house.get("does", "") if house else "")
+    )
     print("-- limits: %s" % ", ".join(spec.get("limits", {}).get("forbidden", [])[:3]))
     return 0
 
@@ -1185,8 +1544,9 @@ def self_test() -> int:
     failures: List[str] = []
 
     def git(args, cwd):
-        return subprocess.run(["git", *args], cwd=str(cwd), capture_output=True,
-                              text=True, timeout=120)
+        return subprocess.run(
+            ["git", *args], cwd=str(cwd), capture_output=True, text=True, timeout=120
+        )
 
     with tempfile.TemporaryDirectory() as tmp:
         broken = Path(tmp) / "broken"
@@ -1199,96 +1559,181 @@ def self_test() -> int:
 
         # -- broken: one seam per detector
         (broken / ".githooks").mkdir()
-        (broken / ".githooks" / "pre-commit").write_text("#!/bin/sh\nexit 0\n", encoding="utf-8")
+        (broken / ".githooks" / "pre-commit").write_text(
+            "#!/bin/sh\nexit 0\n", encoding="utf-8"
+        )
         (broken / "docs").mkdir()
         (broken / "docs" / "install.md").write_text(
             "# Install\n\n```bash\npython tools/does_not_exist.py\n```\n\n"
             "```bash\npython -m pytest tests/ -q\n```\n\n"
             "```bash\n%s -m pytest tests/ -q\n```\n" % sys.executable,
-            encoding="utf-8")
+            encoding="utf-8",
+        )
         (broken / "tools").mkdir()
         (broken / "tools" / "a.py").write_text("FLOOR = 0.89\n", encoding="utf-8")
         (broken / "tools" / "b.py").write_text("FLOOR = 0.70\n", encoding="utf-8")
         (broken / STATE_DIR).mkdir()
         (broken / STATE_DIR / "config.json").write_text(
-            json.dumps({"constants": ["FLOOR"],
-                        "claims": {"ledger": "claims.json",
-                                   "command": [sys.executable, "-c", "pass"]},
-                        "compliance": {"required": ["license", "license-header", "security-policy", "contributing", "code-of-conduct", "readme", "changelog", "ci-config"],
-                                       "optional": ["dependabot", "codeql"]}}),
-            encoding="utf-8")
+            json.dumps(
+                {
+                    "constants": ["FLOOR"],
+                    "claims": {
+                        "ledger": "claims.json",
+                        "command": [sys.executable, "-c", "pass"],
+                    },
+                    "compliance": {
+                        "required": [
+                            "license",
+                            "license-header",
+                            "security-policy",
+                            "contributing",
+                            "code-of-conduct",
+                            "readme",
+                            "changelog",
+                            "ci-config",
+                        ],
+                        "optional": ["dependabot", "codeql"],
+                    },
+                }
+            ),
+            encoding="utf-8",
+        )
         (broken / "claims.json").write_text("{}\n", encoding="utf-8")
         (broken / "tests").mkdir()
-        (broken / "tests" / "test_x.py").write_text("def test_x():\n    assert True\n",
-                                                    encoding="utf-8")
+        (broken / "tests" / "test_x.py").write_text(
+            "def test_x():\n    assert True\n", encoding="utf-8"
+        )
         (broken / ".github" / "workflows").mkdir(parents=True)
         (broken / ".github" / "workflows" / "ci.yml").write_text(
             "name: ci\non: [push]\njobs:\n  build:\n    runs-on: ubuntu-latest\n"
             "    steps:\n      - uses: actions/checkout@v4\n      - run: echo hello\n",
-            encoding="utf-8")
+            encoding="utf-8",
+        )
         (broken / "README.md").write_text(
-            "The tree carries 15 gates and 42 tests.\n", encoding="utf-8")
-        (broken / "LICENSE").write_text("MIT License\n\nCopyright (c) 2024\n", encoding="utf-8")
-        (broken / "SECURITY.md").write_text("# Security Policy\n\nReport security issues to security@example.com\n", encoding="utf-8")
-        (broken / "CONTRIBUTING.md").write_text("# Contributing Guidelines\n\nWelcome!\n", encoding="utf-8")
-        (broken / "CODE_OF_CONDUCT.md").write_text("# Code of Conduct\n\nBe respectful.\n", encoding="utf-8")
-        (broken / "CHANGELOG.md").write_text("# Changelog\n\n## Unreleased\n", encoding="utf-8")
+            "The tree carries 15 gates and 42 tests.\n", encoding="utf-8"
+        )
+        (broken / "LICENSE").write_text(
+            "MIT License\n\nCopyright (c) 2024\n", encoding="utf-8"
+        )
+        (broken / "SECURITY.md").write_text(
+            "# Security Policy\n\nReport security issues to security@example.com\n",
+            encoding="utf-8",
+        )
+        (broken / "CONTRIBUTING.md").write_text(
+            "# Contributing Guidelines\n\nWelcome!\n", encoding="utf-8"
+        )
+        (broken / "CODE_OF_CONDUCT.md").write_text(
+            "# Code of Conduct\n\nBe respectful.\n", encoding="utf-8"
+        )
+        (broken / "CHANGELOG.md").write_text(
+            "# Changelog\n\n## Unreleased\n", encoding="utf-8"
+        )
         git(["add", "-A"], broken)
         git(["commit", "-qm", "seed"], broken)
 
         findings, unrun = scan(broken)
         fired = {item["detector"] for item in findings}
-        for expected in ("phantom-reference", "duplicate-constant", "hooks-unwired",
-                         "two-interpreters", "untested-ci", "compliance-matrix"):
+        for expected in (
+            "phantom-reference",
+            "duplicate-constant",
+            "hooks-unwired",
+            "two-interpreters",
+            "untested-ci",
+            "compliance-matrix",
+        ):
             if expected not in fired:
                 failures.append("%s did not fire on the seeded tree" % expected)
         if not any("UNRUN" in note for note in unrun) and unrun:
             failures.append("an unrun detector was reported without the word UNRUN")
 
-# -- clean: same shape, no defects
+        # -- clean: same shape, no defects
         (clean / ".githooks").mkdir()
-        (clean / ".githooks" / "pre-commit").write_text("#!/bin/sh\nexit 0\n", encoding="utf-8")
+        (clean / ".githooks" / "pre-commit").write_text(
+            "#!/bin/sh\nexit 0\n", encoding="utf-8"
+        )
         git(["config", "core.hooksPath", ".githooks"], clean)
         (clean / "tools").mkdir()
-        (clean / "tools" / "real.py").write_text("# Copyright (c) 2024\n# MIT License\n\nFLOOR = 0.89\n", encoding="utf-8")
+        (clean / "tools" / "real.py").write_text(
+            "# Copyright (c) 2024\n# MIT License\n\nFLOOR = 0.89\n", encoding="utf-8"
+        )
         (clean / STATE_DIR).mkdir()
         # `claims` is configured on the clean tree because a detector with nothing
         # to run is UNRUN, not clean -- the clean fixture must be a tree where every
         # detector actually ran, or it proves only that unconfigured is quiet.
         (clean / STATE_DIR / "config.json").write_text(
-            json.dumps({"constants": ["FLOOR"],
-                        "claims": {"ledger": "claims.json",
-                                   "command": [sys.executable, "-c", "pass"]},
-                        "compliance": {"required": ["license", "license-header", "security-policy", "contributing", "code-of-conduct", "readme", "changelog", "ci-config"],
-                                       "optional": ["dependabot", "codeql"]}}),
-            encoding="utf-8")
+            json.dumps(
+                {
+                    "constants": ["FLOOR"],
+                    "claims": {
+                        "ledger": "claims.json",
+                        "command": [sys.executable, "-c", "pass"],
+                    },
+                    "compliance": {
+                        "required": [
+                            "license",
+                            "license-header",
+                            "security-policy",
+                            "contributing",
+                            "code-of-conduct",
+                            "readme",
+                            "changelog",
+                            "ci-config",
+                        ],
+                        "optional": ["dependabot", "codeql"],
+                    },
+                }
+            ),
+            encoding="utf-8",
+        )
         (clean / "claims.json").write_text("{}\n", encoding="utf-8")
         (clean / "docs").mkdir()
         (clean / "docs" / "install.md").write_text(
-            "# Install\n\n```bash\npython tools/real.py\n```\n", encoding="utf-8")
+            "# Install\n\n```bash\npython tools/real.py\n```\n", encoding="utf-8"
+        )
         (clean / "tests").mkdir()
-        (clean / "tests" / "test_x.py").write_text("def test_x():\n    assert True\n",
-                                                    encoding="utf-8")
+        (clean / "tests" / "test_x.py").write_text(
+            "def test_x():\n    assert True\n", encoding="utf-8"
+        )
         (clean / ".github" / "workflows").mkdir(parents=True)
         (clean / ".github" / "workflows" / "ci.yml").write_text(
             "name: ci\non: [push]\njobs:\n  build:\n    runs-on: ubuntu-latest\n"
-            "    steps:\n      - run: python -m pytest tests/ -q\n", encoding="utf-8")
-        (clean / "LICENSE").write_text("MIT License\n\nCopyright (c) 2024\n", encoding="utf-8")
-        (clean / "SECURITY.md").write_text("# Security Policy\n\nReport security issues to security@example.com\n", encoding="utf-8")
-        (clean / "CONTRIBUTING.md").write_text("# Contributing Guidelines\n\nWelcome!\n", encoding="utf-8")
-        (clean / "CODE_OF_CONDUCT.md").write_text("# Code of Conduct\n\nBe respectful.\n", encoding="utf-8")
+            "    steps:\n      - run: python -m pytest tests/ -q\n",
+            encoding="utf-8",
+        )
+        (clean / "LICENSE").write_text(
+            "MIT License\n\nCopyright (c) 2024\n", encoding="utf-8"
+        )
+        (clean / "SECURITY.md").write_text(
+            "# Security Policy\n\nReport security issues to security@example.com\n",
+            encoding="utf-8",
+        )
+        (clean / "CONTRIBUTING.md").write_text(
+            "# Contributing Guidelines\n\nWelcome!\n", encoding="utf-8"
+        )
+        (clean / "CODE_OF_CONDUCT.md").write_text(
+            "# Code of Conduct\n\nBe respectful.\n", encoding="utf-8"
+        )
         (clean / "README.md").write_text("# Project\n\nDescription\n", encoding="utf-8")
-        (clean / "CHANGELOG.md").write_text("# Changelog\n\n## Unreleased\n", encoding="utf-8")
-        (clean / ".github" / "dependabot.yml").write_text("version: 2\nupdates:\n  - package-ecosystem: pip\n    directory: /\n    schedule:\n      interval: daily\n", encoding="utf-8")
+        (clean / "CHANGELOG.md").write_text(
+            "# Changelog\n\n## Unreleased\n", encoding="utf-8"
+        )
+        (clean / ".github" / "dependabot.yml").write_text(
+            "version: 2\nupdates:\n  - package-ecosystem: pip\n    directory: /\n    schedule:\n      interval: daily\n",
+            encoding="utf-8",
+        )
         (clean / ".github" / "codeql").mkdir(parents=True, exist_ok=True)
-        (clean / ".github" / "codeql" / "codeql-config.yml").write_text("# CodeQL configuration\n", encoding="utf-8")
+        (clean / ".github" / "codeql" / "codeql-config.yml").write_text(
+            "# CodeQL configuration\n", encoding="utf-8"
+        )
         git(["add", "-A"], clean)
         git(["commit", "-qm", "seed"], clean)
 
         findings, unrun = scan(clean)
         if findings:
-            failures.append("the clean tree produced %d finding(s): %s"
-                            % (len(findings), sorted({f["detector"] for f in findings})))
+            failures.append(
+                "the clean tree produced %d finding(s): %s"
+                % (len(findings), sorted({f["detector"] for f in findings}))
+            )
         if unrun:
             failures.append("the clean tree produced UNRUN detectors: %s" % unrun)
 
@@ -1304,8 +1749,10 @@ def self_test() -> int:
             persisted = read_jsonl(findings_file)
             fresh, _ = scan(broken)
             if len(persisted) != len(fresh):
-                failures.append("findings.jsonl holds %d row(s), a fresh scan found %d"
-                                % (len(persisted), len(fresh)))
+                failures.append(
+                    "findings.jsonl holds %d row(s), a fresh scan found %d"
+                    % (len(persisted), len(fresh))
+                )
         if (broken / STATE_DIR / "unrun.txt").exists():
             failures.append("a scan with nothing UNRUN left a stale unrun.txt behind")
 
@@ -1314,7 +1761,7 @@ def self_test() -> int:
         if not queue:
             failures.append("plan() produced an empty queue on the seeded tree")
         passing = "%s -c pass" % sys.executable
-        failing = "%s -c \"import sys; sys.exit(1)\"" % sys.executable
+        failing = '%s -c "import sys; sys.exit(1)"' % sys.executable
         if run_batch(broken, 5, passing, dry_run=True) != 0:
             failures.append("dry run did not exit 0")
         if run_batch(broken, 5, passing) != 0:
@@ -1331,11 +1778,15 @@ def self_test() -> int:
         # The fix must be visible in git, not only in our own state file.
         log = git(["log", "-1", "--pretty=%s"], broken).stdout
         if "FLAMING SWORD" not in log:
-            failures.append("the landed commit is not the batch commit: %r" % log.strip())
+            failures.append(
+                "the landed commit is not the batch commit: %r" % log.strip()
+            )
         show = git(["show", "--stat", "--oneline", "HEAD"], broken).stdout
         if "install.md" not in show:
-            failures.append("the landed commit did not carry the edited file: %r"
-                            % show.strip()[:200])
+            failures.append(
+                "the landed commit did not carry the edited file: %r"
+                % show.strip()[:200]
+            )
 
         # The fixed detector must go quiet, or the fix was cosmetic.
         after, _ = scan(broken)
@@ -1357,9 +1808,13 @@ def self_test() -> int:
             failures.append("housekeeping planned a tracked file for removal")
         removed, _freed, housekeep_failures = housekeep.apply(broken, plan_items)
         if housekeep_failures:
-            failures.append("housekeeping refused its own plan: %s" % housekeep_failures)
+            failures.append(
+                "housekeeping refused its own plan: %s" % housekeep_failures
+            )
         if removed == 0:
-            failures.append("housekeeping removed nothing from a tree with a cache directory")
+            failures.append(
+                "housekeeping removed nothing from a tree with a cache directory"
+            )
         if (broken / "junk" / "__pycache__").exists():
             failures.append("housekeeping reported a removal it did not make")
         if not (broken / "junk" / "keep.py").exists():
@@ -1382,6 +1837,7 @@ def self_test() -> int:
 # CLI
 # --------------------------------------------------------------------------- #
 
+
 def cmd_scan(root: Path, as_json: bool) -> int:
     config = read_config(root)
     findings, unrun = scan(root, config.get("detectors", {}).get("disable", []))
@@ -1401,31 +1857,51 @@ def cmd_scan(root: Path, as_json: bool) -> int:
         print(json.dumps({"findings": findings, "unrun": unrun}, indent=1))
     else:
         for finding in findings:
-            print("  [%-6s] %-24s %s:%d  %s" % (finding["severity"], finding["detector"],
-                                                finding["path"], finding["line"],
-                                                finding["evidence"][:90]))
-        print("\n%d finding(s) across %d detector(s)"
-              % (len(findings), len({f["detector"] for f in findings})))
+            print(
+                "  [%-6s] %-24s %s:%d  %s"
+                % (
+                    finding["severity"],
+                    finding["detector"],
+                    finding["path"],
+                    finding["line"],
+                    finding["evidence"][:90],
+                )
+            )
+        print(
+            "\n%d finding(s) across %d detector(s)"
+            % (len(findings), len({f["detector"] for f in findings}))
+        )
         if unrun:
             print("\nUNRUN -- not clean, unknown:")
             for note in unrun:
                 print("  - %s" % note)
         waiting = disposition.tasks(root)
         if waiting:
-            print("\n%d error task(s) open for disposition (--tasks to read, "
-                  "--dispose <id> --as <decision> to close one)" % len(waiting))
+            print(
+                "\n%d error task(s) open for disposition (--tasks to read, "
+                "--dispose <id> --as <decision> to close one)" % len(waiting)
+            )
     return 0
 
 
 def cmd_plan(root: Path) -> int:
     queue = plan(root)
     open_items = [item for item in queue if item["status"] == "open"]
-    print("%d item(s) in the queue, %d open (%d auto-fixable)"
-          % (len(queue), len(open_items), sum(1 for i in open_items if i["auto"])))
+    print(
+        "%d item(s) in the queue, %d open (%d auto-fixable)"
+        % (len(queue), len(open_items), sum(1 for i in open_items if i["auto"]))
+    )
     for item in open_items[:15]:
-        print("  %-6s %-4s %-24s %s:%d" % (item["severity"],
-                                           "auto" if item["auto"] else "prop",
-                                           item["detector"], item["path"], item["line"]))
+        print(
+            "  %-6s %-4s %-24s %s:%d"
+            % (
+                item["severity"],
+                "auto" if item["auto"] else "prop",
+                item["detector"],
+                item["path"],
+                item["line"],
+            )
+        )
     if len(open_items) > 15:
         print("  ... and %d more" % (len(open_items) - 15))
     return 0
@@ -1436,18 +1912,23 @@ def cmd_status(root: Path) -> int:
     batches = read_jsonl(state_dir(root) / "batches.jsonl")
     counts: Dict[str, int] = {}
     for item in queue:
-        counts[item.get("status", "open")] = counts.get(item.get("status", "open"), 0) + 1
+        counts[item.get("status", "open")] = (
+            counts.get(item.get("status", "open"), 0) + 1
+        )
     print("queue: %s" % (counts or "empty"))
-    print("batches: %d (%d landed)" % (len(batches),
-                                      sum(1 for b in batches if b.get("landed"))))
+    print(
+        "batches: %d (%d landed)"
+        % (len(batches), sum(1 for b in batches if b.get("landed")))
+    )
     unrun = state_dir(root) / "unrun.txt"
     if unrun.exists():
         print("UNRUN detectors:\n%s" % unrun.read_text(encoding="utf-8").strip())
     return 0
 
 
-def cmd_housekeep(root: Path, act: bool, as_json: bool, state_days: int,
-                  max_mb: int) -> int:
+def cmd_housekeep(
+    root: Path, act: bool, as_json: bool, state_days: int, max_mb: int
+) -> int:
     """The other half of a sweep: what accumulated, and what may go.
 
     The plan comes from `housekeep.py`, which refuses everything git tracks, every
@@ -1459,8 +1940,18 @@ def cmd_housekeep(root: Path, act: bool, as_json: bool, state_days: int,
     if act:
         removed, freed, failures = housekeep.apply(root, items)
     if as_json:
-        print(json.dumps({"applied": act, "removed": removed, "bytes_freed": freed,
-                          "failures": failures, "items": items}, indent=1))
+        print(
+            json.dumps(
+                {
+                    "applied": act,
+                    "removed": removed,
+                    "bytes_freed": freed,
+                    "failures": failures,
+                    "items": items,
+                },
+                indent=1,
+            )
+        )
     else:
         print(housekeep.report(items, applied=act))
         if act:
@@ -1468,9 +1959,15 @@ def cmd_housekeep(root: Path, act: bool, as_json: bool, state_days: int,
         for failure in failures:
             print("  REFUSED %s" % failure)
     for failure in failures:
-        record_error(root, "housekeep", "refused", failure.split(":")[0], failure,
-                     remedy="look at the path: it moved, became a symlink, or is owned "
-                            "by something this tool will not touch")
+        record_error(
+            root,
+            "housekeep",
+            "refused",
+            failure.split(":")[0],
+            failure,
+            remedy="look at the path: it moved, became a symlink, or is owned "
+            "by something this tool will not touch",
+        )
     return 1 if failures else 0
 
 
@@ -1480,24 +1977,39 @@ def cmd_tasks(root: Path, include_disposed: bool) -> int:
         print("no %stask(s) recorded" % ("/all " if include_disposed else "open "))
         return 0
     for row in rows:
-        state = row["status"] if row["status"] == "open" else row.get("disposition") or "closed"
-        print("  %-7s %-5s %-16s %-24s %s"
-              % (row["id"], state, row["stage"], row["subject"][:24], row["what"][:96]))
+        state = (
+            row["status"]
+            if row["status"] == "open"
+            else row.get("disposition") or "closed"
+        )
+        print(
+            "  %-7s %-5s %-16s %-24s %s"
+            % (row["id"], state, row["stage"], row["subject"][:24], row["what"][:96])
+        )
         if row["seen"] > 1:
-            print("  %-7s %s, seen %d time(s), last %s"
-                  % ("", "" , row["seen"], row.get("last_seen", "")))
+            print(
+                "  %-7s %s, seen %d time(s), last %s"
+                % ("", "", row["seen"], row.get("last_seen", ""))
+            )
         if row.get("note"):
             print("  %-7s note: %s" % ("", row["note"][:110]))
     counts = disposition.summary(root)
-    print("\n%d task(s): %s" % (len(rows), ", ".join("%s %d" % (key, value)
-                                                for key, value in sorted(counts.items()))))
+    print(
+        "\n%d task(s): %s"
+        % (
+            len(rows),
+            ", ".join("%s %d" % (key, value) for key, value in sorted(counts.items())),
+        )
+    )
     return 0
 
 
 def cmd_dispose(root: Path, task_id: str, as_what: Optional[str], note: str) -> int:
     if not as_what:
-        print("REFUSED: --dispose needs --as <%s>. A task closed without a reason is "
-              "a task deleted." % "|".join(disposition.DISPOSITIONS))
+        print(
+            "REFUSED: --dispose needs --as <%s>. A task closed without a reason is "
+            "a task deleted." % "|".join(disposition.DISPOSITIONS)
+        )
         return 2
     try:
         row = disposition.dispose(root, task_id, as_what, note)
@@ -1513,13 +2025,21 @@ def cmd_dispose(root: Path, task_id: str, as_what: Optional[str], note: str) -> 
 
 def main(argv: Optional[Sequence[str]] = None) -> int:
     parser = argparse.ArgumentParser(description="A FLAMING SWORD sweep of a codebase.")
-    parser.add_argument("--root", default=".", help="repository to sweep (default: cwd)")
-    parser.add_argument("--housekeep", action="store_true",
-                        help="plan the housekeeping pass: caches, leftovers, empty "
-                             "directories, disposable sweep state, and the hazards "
-                             "a human has to look at")
-    parser.add_argument("--apply", action="store_true",
-                        help="with --housekeep: delete, instead of reporting")
+    parser.add_argument(
+        "--root", default=".", help="repository to sweep (default: cwd)"
+    )
+    parser.add_argument(
+        "--housekeep",
+        action="store_true",
+        help="plan the housekeeping pass: caches, leftovers, empty "
+        "directories, disposable sweep state, and the hazards "
+        "a human has to look at",
+    )
+    parser.add_argument(
+        "--apply",
+        action="store_true",
+        help="with --housekeep: delete, instead of reporting",
+    )
     parser.add_argument("--state-days", type=int, default=housekeep.DEFAULT_STATE_DAYS)
     parser.add_argument("--max-mb", type=int, default=housekeep.DEFAULT_MAX_MB)
     parser.add_argument("--scan", action="store_true")
@@ -1528,52 +2048,100 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
     parser.add_argument("--run", action="store_true")
     parser.add_argument("--land", action="store_true")
     parser.add_argument("--brief", action="store_true")
-    parser.add_argument("--record-research", metavar="JSONL",
-                        help="validate research records and queue them as proposals")
+    parser.add_argument(
+        "--record-research",
+        metavar="JSONL",
+        help="validate research records and queue them as proposals",
+    )
     parser.add_argument("--self-test", action="store_true")
-    parser.add_argument("--aio", metavar="PROMPT", default=None,
-                        help="turn a user prompt into an AIO instruction object "
-                             "(frame + sentinel + memory); refuses with reasons and "
-                             "renders nothing when any of them fails")
-    parser.add_argument("--jsonl", default=None,
-                        help="with --aio: a lesson ledger to recall from")
-    parser.add_argument("--acceptance", default="",
-                        help="with --aio: the command and outcome that ends the task")
-    parser.add_argument("--defends", action="append", default=[],
-                        help="with --aio: a test, claim or gate that survives "
-                             "(repeatable; a placeholder is refused)")
-    parser.add_argument("--defend", metavar="INTENT", default=None,
-                        help="print the defensive frame for a change, and refuse a "
-                             "frame that cannot name what it defends")
+    parser.add_argument(
+        "--aio",
+        metavar="PROMPT",
+        default=None,
+        help="turn a user prompt into an AIO instruction object "
+        "(frame + sentinel + memory); refuses with reasons and "
+        "renders nothing when any of them fails",
+    )
+    parser.add_argument(
+        "--jsonl", default=None, help="with --aio: a lesson ledger to recall from"
+    )
+    parser.add_argument(
+        "--acceptance",
+        default="",
+        help="with --aio: the command and outcome that ends the task",
+    )
+    parser.add_argument(
+        "--defends",
+        action="append",
+        default=[],
+        help="with --aio: a test, claim or gate that survives "
+        "(repeatable; a placeholder is refused)",
+    )
+    parser.add_argument(
+        "--defend",
+        metavar="INTENT",
+        default=None,
+        help="print the defensive frame for a change, and refuse a "
+        "frame that cannot name what it defends",
+    )
     parser.add_argument("--target", default="", help="with --defend: the artefact")
     parser.add_argument("--evidence", default="", help="with --defend: command or path")
-    parser.add_argument("--preserve", action="store_true",
-                        help="with --defend: preservation work (posture becomes "
-                             "mandatory)")
+    parser.add_argument(
+        "--preserve",
+        action="store_true",
+        help="with --defend: preservation work (posture becomes " "mandatory)",
+    )
     parser.add_argument("--batch", type=int, default=5)
-    parser.add_argument("--test", dest="test_command", default=None,
-                        help="the project's own verification command")
+    parser.add_argument(
+        "--test",
+        dest="test_command",
+        default=None,
+        help="the project's own verification command",
+    )
     parser.add_argument("--dry-run", action="store_true")
     parser.add_argument("--json", action="store_true")
-    parser.add_argument("--tasks", action="store_true",
-                        help="read the disposition ledger: every error the sweep met, "
-                             "one task per error, waiting for a decision")
-    parser.add_argument("--watch", action="store_true",
-                        help="with --scan: continuously re-scan on interval")
-    parser.add_argument("--interval", type=int, default=30,
-                        help="with --watch: re-scan interval in seconds (default 30)")
-    parser.add_argument("--since", metavar="COMMIT",
-                        help="with --scan: only scan files changed since commit")
-    parser.add_argument("--parallel", action="store_true",
-                        help="with --run: apply independent fixes in parallel")
-    parser.add_argument("--all", action="store_true",
-                        help="with --tasks: include disposed tasks")
-    parser.add_argument("--dispose", metavar="TASK",
-                        help="close one task with --as, after deciding what it is")
-    parser.add_argument("--as", dest="as_what", metavar="DISPOSITION",
-                        choices=list(disposition.DISPOSITIONS),
-                        help="how the task was closed: %s"
-                             % "|".join(disposition.DISPOSITIONS))
+    parser.add_argument(
+        "--tasks",
+        action="store_true",
+        help="read the disposition ledger: every error the sweep met, "
+        "one task per error, waiting for a decision",
+    )
+    parser.add_argument(
+        "--watch",
+        action="store_true",
+        help="with --scan: continuously re-scan on interval",
+    )
+    parser.add_argument(
+        "--interval",
+        type=int,
+        default=30,
+        help="with --watch: re-scan interval in seconds (default 30)",
+    )
+    parser.add_argument(
+        "--since",
+        metavar="COMMIT",
+        help="with --scan: only scan files changed since commit",
+    )
+    parser.add_argument(
+        "--parallel",
+        action="store_true",
+        help="with --run: apply independent fixes in parallel",
+    )
+    parser.add_argument(
+        "--all", action="store_true", help="with --tasks: include disposed tasks"
+    )
+    parser.add_argument(
+        "--dispose",
+        metavar="TASK",
+        help="close one task with --as, after deciding what it is",
+    )
+    parser.add_argument(
+        "--as",
+        dest="as_what",
+        metavar="DISPOSITION",
+        choices=list(disposition.DISPOSITIONS),
+        help="how the task was closed: %s" % "|".join(disposition.DISPOSITIONS),
+    )
     parser.add_argument("--note", default="", help="with --dispose: why, in one line")
     args = parser.parse_args(argv)
 
@@ -1582,11 +2150,20 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
     if args.brief:
         return brief()
     if args.aio is not None:
-        return cmd_aio(args.aio, args.target, args.acceptance, args.evidence,
-                       args.defends, args.preserve, args.jsonl, args.json)
+        return cmd_aio(
+            args.aio,
+            args.target,
+            args.acceptance,
+            args.evidence,
+            args.defends,
+            args.preserve,
+            args.jsonl,
+            args.json,
+        )
     if args.defend is not None:
-        return cmd_defend(args.defend, args.target, args.evidence, args.preserve,
-                          args.json)
+        return cmd_defend(
+            args.defend, args.target, args.evidence, args.preserve, args.json
+        )
     root = Path(args.root).resolve()
     if args.record_research:
         return record_research(root, Path(args.record_research))

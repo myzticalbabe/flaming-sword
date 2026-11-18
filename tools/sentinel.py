@@ -51,10 +51,10 @@ BATCH MODE (--frame-file)
     Frames are checked in order and the batch stops at the first BLOCKED one,
     naming its index, so exit 0 always means "every frame checked".
 """
+
 from __future__ import annotations
 
 import argparse
-import copy
 import json
 import re
 import sys
@@ -70,17 +70,51 @@ NAME = "REAPER"
 
 #: The closed act vocabulary. An intent that opens with none of these is a topic, not a
 #: task, and the difference is the whole reason this file exists.
-ACTS = ("add", "build", "convert", "delete", "demand", "extract", "fix", "frame",
-        "guard", "land", "measure", "migrate", "record", "refuse", "rename",
-        "replace", "restore", "ship", "split", "stop", "verify", "write")
+ACTS = (
+    "add",
+    "build",
+    "convert",
+    "delete",
+    "demand",
+    "extract",
+    "fix",
+    "frame",
+    "guard",
+    "land",
+    "measure",
+    "migrate",
+    "record",
+    "refuse",
+    "rename",
+    "replace",
+    "restore",
+    "ship",
+    "split",
+    "stop",
+    "verify",
+    "write",
+)
 
 #: Refused in any field that must assert (never in a field whose job is to name the bad
 #: shape -- that is the control's job, and scanning it refuses the honest control).
-_WISHES = ("good enough", "looks right", "looks good", "should work", "should be fine",
-           "seems fine", "works as expected", "tested manually", "obviously",
-           "clearly correct", "no issues", "trust me")
+_WISHES = (
+    "good enough",
+    "looks right",
+    "looks good",
+    "should work",
+    "should be fine",
+    "seems fine",
+    "works as expected",
+    "tested manually",
+    "obviously",
+    "clearly correct",
+    "no issues",
+    "trust me",
+)
 
-_PATHISH = re.compile(r"([\w./\\-]+\.(?:py|sh|bat|md|json|jsonl|yml|yaml|js|ts|toml|db))")
+_PATHISH = re.compile(
+    r"([\w./\\-]+\.(?:py|sh|bat|md|json|jsonl|yml|yaml|js|ts|toml|db))"
+)
 _NEW = "new:"
 
 
@@ -93,8 +127,9 @@ def _load_defender():
     import importlib.util
 
     path = HERE / "defender.py"
-    spec = importlib.util.spec_from_file_location("flaming_sword_defender_sentinel",
-                                                  path)
+    spec = importlib.util.spec_from_file_location(
+        "flaming_sword_defender_sentinel", path
+    )
     if spec is None or spec.loader is None:
         raise SentinelError("defender.py not loadable from %s" % path)
     module = importlib.util.module_from_spec(spec)
@@ -103,10 +138,18 @@ def _load_defender():
     return module
 
 
-def check(intent: str, target: str, must_not_break: Sequence[str], defends: Sequence[str],
-          refusal: str, acceptance: str = "", evidence: str = "", preserve: bool = False,
-          posture: Optional[Dict[str, Any]] = None,
-          root: Optional[Path] = None) -> Dict[str, Any]:
+def check(
+    intent: str,
+    target: str,
+    must_not_break: Sequence[str],
+    defends: Sequence[str],
+    refusal: str,
+    acceptance: str = "",
+    evidence: str = "",
+    preserve: bool = False,
+    posture: Optional[Dict[str, Any]] = None,
+    root: Optional[Path] = None,
+) -> Dict[str, Any]:
     """Return {verdict, problems, resolved}. Never raises for a bad frame."""
     root = Path(root) if root is not None else ROOT
     problems: List[str] = []
@@ -123,20 +166,23 @@ def check(intent: str, target: str, must_not_break: Sequence[str], defends: Sequ
     if not first:
         problems.append("S1 intent-scoped: no intent")
     elif first not in ACTS:
-        problems.append("S1 intent-scoped: %r does not open with an act from %s -- a "
-                        "topic is not a task" % (first, ", ".join(ACTS[:6]) + ", ..."))
+        problems.append(
+            "S1 intent-scoped: %r does not open with an act from %s -- a "
+            "topic is not a task" % (first, ", ".join(ACTS[:6]) + ", ...")
+        )
 
     # S2 -- the target must resolve, or be honestly declared new
     target = (target or "").strip()
     if not target:
         problems.append("S2 target-resolves: no target")
     elif target.startswith(_NEW):
-        declared = target[len(_NEW):].strip()
+        declared = target[len(_NEW) :].strip()
         if not declared:
             problems.append("S2 target-resolves: %r declares nothing" % target)
         elif (root / declared).exists():
-            problems.append("S2 target-resolves: %r is declared new but already exists"
-                            % declared)
+            problems.append(
+                "S2 target-resolves: %r is declared new but already exists" % declared
+            )
         else:
             note("%s (declared new)" % declared)
     else:
@@ -144,8 +190,10 @@ def check(intent: str, target: str, must_not_break: Sequence[str], defends: Sequ
         if candidate.exists():
             note(target)
         else:
-            problems.append("S2 target-resolves: %r does not exist and is not declared "
-                            "new as %s%s" % (target, _NEW, target))
+            problems.append(
+                "S2 target-resolves: %r does not exist and is not declared "
+                "new as %s%s" % (target, _NEW, target)
+            )
 
     # S3 -- a break list that cannot be stat'ed decides nothing
     if not must_not_break:
@@ -153,15 +201,19 @@ def check(intent: str, target: str, must_not_break: Sequence[str], defends: Sequ
     for item in must_not_break or []:
         paths = _PATHISH.findall(str(item))
         if not paths:
-            problems.append("S3 break-resolves: %r names no path, so nothing can be "
-                            "verified as still passing" % (item,))
+            problems.append(
+                "S3 break-resolves: %r names no path, so nothing can be "
+                "verified as still passing" % (item,)
+            )
             continue
         for path in paths:
             if (root / path).exists():
                 note(path)
             else:
-                problems.append("S3 break-resolves: %r does not exist -- a break list "
-                                "entry naming a missing file is a wish" % path)
+                problems.append(
+                    "S3 break-resolves: %r does not exist -- a break list "
+                    "entry naming a missing file is a wish" % path
+                )
 
     # S4 / S5 / S6 -- the frame's own assertions
     named = [str(d).strip() for d in defends or [] if str(d).strip()]
@@ -171,12 +223,17 @@ def check(intent: str, target: str, must_not_break: Sequence[str], defends: Sequ
         # A placeholder is the shape a model writes when it has not decided yet: it is
         # long enough to pass a length check and says nothing, so it is refused.
         if ("<" in item and ">" in item) or item.lower().startswith("todo"):
-            problems.append("S4 defence-named: %r is a placeholder, not a defence -- "
-                            "name the test, claim or gate that survives" % (item,))
+            problems.append(
+                "S4 defence-named: %r is a placeholder, not a defence -- "
+                "name the test, claim or gate that survives" % (item,)
+            )
     if not (refusal or "").strip():
-        problems.append("S5 landing-stated: the frame does not say what blocks the "
-                        "landing")
-    blob = " ".join([intent or "", refusal or "", acceptance or "", evidence or ""]).lower()
+        problems.append(
+            "S5 landing-stated: the frame does not say what blocks the " "landing"
+        )
+    blob = " ".join(
+        [intent or "", refusal or "", acceptance or "", evidence or ""]
+    ).lower()
     for wish in _WISHES:
         if wish in blob:
             problems.append("S6 no-wishes: %r decides nothing" % (wish,))
@@ -184,8 +241,10 @@ def check(intent: str, target: str, must_not_break: Sequence[str], defends: Sequ
     # S7 -- posture, delegated so there is one answer to "what is a valid posture"
     if preserve:
         defender = _load_defender()
-        problems.extend("S7 posture-intact: " + p.replace("D9 posture-declared: ", "")
-                        for p in defender.posture_problems(posture or {}))
+        problems.extend(
+            "S7 posture-intact: " + p.replace("D9 posture-declared: ", "")
+            for p in defender.posture_problems(posture or {})
+        )
 
     return {
         "verdict": "SENTINEL OK" if not problems else "SENTINEL BLOCKED",
@@ -199,6 +258,7 @@ def check(intent: str, target: str, must_not_break: Sequence[str], defends: Sequ
 # --------------------------------------------------------------------------- #
 # Controls
 # --------------------------------------------------------------------------- #
+
 
 def _healthy(root: Optional[Path] = None) -> Dict[str, Any]:
     return check(
@@ -265,11 +325,15 @@ def selftest(root: Optional[Path] = None) -> Tuple[int, List[str]]:
     base = _healthy(root)
     if base["problems"]:
         failures += 1
-        lines.append("FAIL healthy control: a correct action was BLOCKED: %s"
-                     % base["problems"][:3])
+        lines.append(
+            "FAIL healthy control: a correct action was BLOCKED: %s"
+            % base["problems"][:3]
+        )
     else:
-        lines.append("PASS healthy control: a correct action is allowed (%d path(s) "
-                     "resolved)" % len(base["resolved"]))
+        lines.append(
+            "PASS healthy control: a correct action is allowed (%d path(s) "
+            "resolved)" % len(base["resolved"])
+        )
 
     for name, mutate, expected in _mutations():
         kwargs = dict(
@@ -292,8 +356,10 @@ def selftest(root: Optional[Path] = None) -> Tuple[int, List[str]]:
             lines.append("PASS %s -> %s" % (name, expected))
         else:
             failures += 1
-            lines.append("FAIL %s: expected %r, got %s"
-                         % (name, expected, verdict["problems"][:2] or "SENTINEL OK"))
+            lines.append(
+                "FAIL %s: expected %r, got %s"
+                % (name, expected, verdict["problems"][:2] or "SENTINEL OK")
+            )
 
     # A sentinel that cannot read its own inputs must say so, not pass.
     try:
@@ -333,49 +399,75 @@ def run_frames(payload: Any, root: Optional[Path] = None) -> Tuple[int, Dict[str
             root = Path(payload["root"])
         payload = payload["frames"]
     if not isinstance(payload, list) or not payload:
-        return 2, {"mode": "batch", "error": "no frame list: --frame-file must hold a "
-                                                "non-empty list (or {\"frames\": [...]})"}
+        return 2, {
+            "mode": "batch",
+            "error": "no frame list: --frame-file must hold a "
+            'non-empty list (or {"frames": [...]})',
+        }
 
     verdicts = []
     for index, frame in enumerate(payload):
         if not isinstance(frame, dict):
-            return 2, {"mode": "batch", "error": "frame #%d is not an object" % index,
-                       "checked": verdicts}
-        missing = [key for key in _FRAME_REQUIRED
-                   if key not in frame or not isinstance(frame[key], (str, list))]
+            return 2, {
+                "mode": "batch",
+                "error": "frame #%d is not an object" % index,
+                "checked": verdicts,
+            }
+        missing = [
+            key
+            for key in _FRAME_REQUIRED
+            if key not in frame or not isinstance(frame[key], (str, list))
+        ]
         if missing:
-            return 2, {"mode": "batch",
-                       "error": "frame #%d missing/mistyped field(s): %s"
-                                % (index, ", ".join(missing)),
-                       "checked": verdicts}
+            return 2, {
+                "mode": "batch",
+                "error": "frame #%d missing/mistyped field(s): %s"
+                % (index, ", ".join(missing)),
+                "checked": verdicts,
+            }
         try:
-            verdict = check(root=root,
-                            intent=frame["intent"], target=frame["target"],
-                            must_not_break=frame["must_not_break"],
-                            defends=frame["defends"], refusal=frame["refusal"],
-                            acceptance=frame.get("acceptance", ""),
-                            evidence=frame.get("evidence", ""),
-                            preserve=bool(frame.get("preserve")),
-                            posture=frame.get("posture"),
-                            )
-        except Exception as exc:  # noqa: BLE001 -- surfaced as cannot-run, never swallowed
-            return 2, {"mode": "batch",
-                       "error": "frame #%d could not run (%s: %s)"
-                                % (index, type(exc).__name__, exc),
-                       "checked": verdicts}
-        verdicts.append({"frame": index, "verdict": verdict["verdict"],
-                         "problems": verdict["problems"]})
+            verdict = check(
+                root=root,
+                intent=frame["intent"],
+                target=frame["target"],
+                must_not_break=frame["must_not_break"],
+                defends=frame["defends"],
+                refusal=frame["refusal"],
+                acceptance=frame.get("acceptance", ""),
+                evidence=frame.get("evidence", ""),
+                preserve=bool(frame.get("preserve")),
+                posture=frame.get("posture"),
+            )
+        except (
+            Exception
+        ) as exc:  # noqa: BLE001 -- surfaced as cannot-run, never swallowed
+            return 2, {
+                "mode": "batch",
+                "error": "frame #%d could not run (%s: %s)"
+                % (index, type(exc).__name__, exc),
+                "checked": verdicts,
+            }
+        verdicts.append(
+            {
+                "frame": index,
+                "verdict": verdict["verdict"],
+                "problems": verdict["problems"],
+            }
+        )
         if verdict["verdict"] == "SENTINEL BLOCKED":
-            return 1, {"mode": "batch", "checked": verdicts,
-                       "blocked_at": index,
-                       "remaining": len(payload) - index - 1}
-    return 0, {"mode": "batch", "checked": verdicts, "blocked_at": None,
-               "remaining": 0}
+            return 1, {
+                "mode": "batch",
+                "checked": verdicts,
+                "blocked_at": index,
+                "remaining": len(payload) - index - 1,
+            }
+    return 0, {"mode": "batch", "checked": verdicts, "blocked_at": None, "remaining": 0}
 
 
 def main(argv: Optional[Sequence[str]] = None) -> int:
     parser = argparse.ArgumentParser(
-        description="Pre-action check: does this framed change resolve?")
+        description="Pre-action check: does this framed change resolve?"
+    )
     parser.add_argument("--intent", default="")
     parser.add_argument("--target", default="")
     parser.add_argument("--break", dest="must_not_break", action="append", default=[])
@@ -387,8 +479,12 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
     parser.add_argument("--root", default=None)
     parser.add_argument("--json", action="store_true")
     parser.add_argument("--selftest", action="store_true")
-    parser.add_argument("--frame-file", action="append", default=[],
-                        help="JSON holding one frame list; checked in order")
+    parser.add_argument(
+        "--frame-file",
+        action="append",
+        default=[],
+        help="JSON holding one frame list; checked in order",
+    )
     args = parser.parse_args(argv)
 
     if args.selftest:
@@ -399,8 +495,10 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
             for line in lines:
                 print(line)
             print("")
-            print("SELFTEST %s (%d control(s), %d failure(s))"
-                  % ("OK" if not failures else "FAILED", len(lines), failures))
+            print(
+                "SELFTEST %s (%d control(s), %d failure(s))"
+                % ("OK" if not failures else "FAILED", len(lines), failures)
+            )
         return 0 if not failures else 1
 
     if args.frame_file:
@@ -408,17 +506,23 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
             parser.error("--frame-file is exclusive with --intent (one job at a time)")
         alive = [Path(p) for p in args.frame_file if Path(p).exists()]
         if not alive:
-            print("CANNOT RUN: no --frame-file exists on the paths given", file=sys.stderr)
+            print(
+                "CANNOT RUN: no --frame-file exists on the paths given", file=sys.stderr
+            )
             return 2
         code, report = None, None
         for path in alive:
             try:
                 payload = json.loads(path.read_text(encoding="utf-8"))
             except (OSError, ValueError) as exc:
-                print("CANNOT RUN: %s is not readable JSON (%s)" % (path, exc),
-                      file=sys.stderr)
+                print(
+                    "CANNOT RUN: %s is not readable JSON (%s)" % (path, exc),
+                    file=sys.stderr,
+                )
                 return 2
-            code, report = run_frames(payload, root=Path(args.root) if args.root else None)
+            code, report = run_frames(
+                payload, root=Path(args.root) if args.root else None
+            )
             if code != 0:
                 break
         if args.json:
@@ -427,12 +531,20 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
             if report.get("error"):
                 print(report["error"], file=sys.stderr)
             for verdict in report.get("checked", []):
-                print("frame #%d %s %s" % (verdict["frame"], verdict["verdict"],
-                                           "; ".join(verdict["problems"]) or ""))
+                print(
+                    "frame #%d %s %s"
+                    % (
+                        verdict["frame"],
+                        verdict["verdict"],
+                        "; ".join(verdict["problems"]) or "",
+                    )
+                )
             if report.get("blocked_at") is not None:
                 print("")
-                print("BATCH BLOCKED at frame %d; %d frame(s) never checked"
-                      % (report["blocked_at"], report.get("remaining", 0)))
+                print(
+                    "BATCH BLOCKED at frame %d; %d frame(s) never checked"
+                    % (report["blocked_at"], report.get("remaining", 0))
+                )
         return code
 
     if not args.intent:
@@ -441,11 +553,18 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
     posture = None
     if args.preserve:
         posture = _load_defender().default_posture()
-    verdict = check(intent=args.intent, target=args.target,
-                    must_not_break=args.must_not_break, defends=args.defends,
-                    refusal=args.refusal, acceptance=args.acceptance,
-                    evidence=args.evidence, preserve=args.preserve, posture=posture,
-                    root=Path(args.root) if args.root else None)
+    verdict = check(
+        intent=args.intent,
+        target=args.target,
+        must_not_break=args.must_not_break,
+        defends=args.defends,
+        refusal=args.refusal,
+        acceptance=args.acceptance,
+        evidence=args.evidence,
+        preserve=args.preserve,
+        posture=posture,
+        root=Path(args.root) if args.root else None,
+    )
     if args.json:
         print(json.dumps(verdict, indent=1, sort_keys=True))
     else:
@@ -456,8 +575,10 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
             print("  resolved: %s" % ", ".join(verdict["resolved"][:6]))
         if verdict["problems"]:
             print("")
-            print("  the action is BLOCKED: no claim above can be satisfied by better "
-                  "prose, only by a path that exists")
+            print(
+                "  the action is BLOCKED: no claim above can be satisfied by better "
+                "prose, only by a path that exists"
+            )
     return 0 if not verdict["problems"] else 1
 
 

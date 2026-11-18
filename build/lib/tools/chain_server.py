@@ -51,7 +51,6 @@ from __future__ import annotations
 import argparse
 import json
 import sys
-import threading
 import urllib.error
 import urllib.request
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer

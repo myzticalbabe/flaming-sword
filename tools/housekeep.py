@@ -28,6 +28,7 @@ Design rules, each one bought rather than assumed:
 
 Standard library and `git`.
 """
+
 from __future__ import annotations
 
 import argparse
@@ -44,8 +45,16 @@ STATE_DIR = ".flaming_sword"
 
 #: Directories no repository tracks on purpose. Deleting one is safe without
 #: asking git, which is what lets the tool work at all when git is unavailable.
-CACHE_DIRS = {"__pycache__", ".pytest_cache", ".mypy_cache", ".ruff_cache",
-              ".pyright", ".hypothesis", ".tox", ".ipynb_checkpoints"}
+CACHE_DIRS = {
+    "__pycache__",
+    ".pytest_cache",
+    ".mypy_cache",
+    ".ruff_cache",
+    ".pyright",
+    ".hypothesis",
+    ".tox",
+    ".ipynb_checkpoints",
+}
 
 #: Files that are a by-product of an editor or an OS, never content.
 LEFTOVER_NAMES = {".DS_Store", "Thumbs.db", "desktop.ini"}
@@ -105,8 +114,9 @@ def tracked_paths(root: Path) -> Optional[Set[str]]:
     """
     completed = None
     with contextlib.suppress(OSError, subprocess.TimeoutExpired):
-        completed = subprocess.run(["git", "ls-files", "-z"], cwd=str(root),
-                                   capture_output=True, timeout=120)
+        completed = subprocess.run(
+            ["git", "ls-files", "-z"], cwd=str(root), capture_output=True, timeout=120
+        )
     if completed is None or completed.returncode != 0:
         return None
     raw = completed.stdout.decode("utf-8", errors="replace")
@@ -123,9 +133,12 @@ def _tracked_inside(tracked: Set[str], rel: str) -> bool:
     return any(path.startswith(prefix) for path in tracked)
 
 
-def collect(root: Path, tracked: Optional[Set[str]] = None,
-            state_days: int = DEFAULT_STATE_DAYS,
-            max_mb: int = DEFAULT_MAX_MB) -> List[Dict]:
+def collect(
+    root: Path,
+    tracked: Optional[Set[str]] = None,
+    state_days: int = DEFAULT_STATE_DAYS,
+    max_mb: int = DEFAULT_MAX_MB,
+) -> List[Dict]:
     """Plan the housekeeping pass. Deletes nothing; says what it would do."""
     root = root.resolve()
     if tracked is None:
@@ -133,28 +146,47 @@ def collect(root: Path, tracked: Optional[Set[str]] = None,
     items: List[Dict] = []
     planned_gone: Set[str] = set()
 
-    def add(rule: str, path: Path, kind: str, why: str, size: Optional[int] = None) -> None:
+    def add(
+        rule: str, path: Path, kind: str, why: str, size: Optional[int] = None
+    ) -> None:
         rel = _rel(root, path)
-        items.append({"rule": rule, "path": rel, "action": kind,
-                      "bytes": _size(path) if size is None else size, "why": why})
+        items.append(
+            {
+                "rule": rule,
+                "path": rel,
+                "action": kind,
+                "bytes": _size(path) if size is None else size,
+                "why": why,
+            }
+        )
 
     for base, dirnames, filenames in os.walk(root, topdown=True, followlinks=False):
         base_path = Path(base)
         # `.git` is not housekeeping: its internals are git's own, and a walk
         # that descends into it both lies about sizes and risks a lock file.
-        dirnames[:] = sorted(name for name in dirnames
-                             if name != ".git"
-                             and not (base_path / name).is_symlink())
+        dirnames[:] = sorted(
+            name
+            for name in dirnames
+            if name != ".git" and not (base_path / name).is_symlink()
+        )
         for name in list(dirnames):
             candidate = base_path / name
             rel = _rel(root, candidate)
             if name in CACHE_DIRS:
                 if tracked is not None and _tracked_inside(tracked, rel):
-                    add("bytecode-cache" if name == "__pycache__" else "tool-cache",
-                        candidate, "keep", "git tracks a file inside it")
+                    add(
+                        "bytecode-cache" if name == "__pycache__" else "tool-cache",
+                        candidate,
+                        "keep",
+                        "git tracks a file inside it",
+                    )
                 else:
-                    add("bytecode-cache" if name == "__pycache__" else "tool-cache",
-                        candidate, "delete", "regenerated on the next import or run")
+                    add(
+                        "bytecode-cache" if name == "__pycache__" else "tool-cache",
+                        candidate,
+                        "delete",
+                        "regenerated on the next import or run",
+                    )
                     planned_gone.add(rel)
                 dirnames.remove(name)
 
@@ -168,40 +200,71 @@ def collect(root: Path, tracked: Optional[Set[str]] = None,
                     # A `.orig` may be the last copy of something. Without git
                     # there is no way to tell content from by-product, so the
                     # refusal is total rather than probabilistic.
-                    add("editor-leftover", candidate, "keep",
-                        "git unreadable: cannot prove this is a by-product")
+                    add(
+                        "editor-leftover",
+                        candidate,
+                        "keep",
+                        "git unreadable: cannot prove this is a by-product",
+                    )
                 elif rel in tracked:
-                    add("editor-leftover", candidate, "keep", "git tracks it: it is content")
+                    add(
+                        "editor-leftover",
+                        candidate,
+                        "keep",
+                        "git tracks it: it is content",
+                    )
                 else:
-                    add("editor-leftover", candidate, "delete",
-                        "editor or OS by-product, not content")
+                    add(
+                        "editor-leftover",
+                        candidate,
+                        "delete",
+                        "editor or OS by-product, not content",
+                    )
                     planned_gone.add(rel)
                 continue
             if name in DISPOSABLE_STATE and base_path.name == STATE_DIR:
                 age = _age_days(candidate)
                 if age >= state_days:
-                    add("sweep-state", candidate, "delete",
+                    add(
+                        "sweep-state",
+                        candidate,
+                        "delete",
                         "disposable sweep state, %.0f day(s) old (batches.jsonl is kept: "
-                        "it is the landing record)" % age)
+                        "it is the landing record)" % age,
+                    )
                     planned_gone.add(rel)
 
     # Hazards: reported, never removed.
     for record in _unlanded_batches(root):
-        items.append({"rule": "unlanded-batch", "path": "%s/batches.jsonl" % STATE_DIR,
-                      "action": "keep", "bytes": 0,
-                      "why": "batch %s fixed %d item(s), verified, and never landed -- "
-                             "roll it forward or discard it deliberately"
-                             % (record.get("at", "?"), len(record.get("fixed") or []))})
+        items.append(
+            {
+                "rule": "unlanded-batch",
+                "path": "%s/batches.jsonl" % STATE_DIR,
+                "action": "keep",
+                "bytes": 0,
+                "why": "batch %s fixed %d item(s), verified, and never landed -- "
+                "roll it forward or discard it deliberately"
+                % (record.get("at", "?"), len(record.get("fixed") or [])),
+            }
+        )
 
     if tracked is not None:
         for rel in sorted(_untracked_by_size(root, tracked, max_mb)):
-            items.append({"rule": "large-untracked", "path": rel, "action": "keep",
-                          "bytes": _size(root / rel),
-                          "why": "untracked and larger than %d MB: a human decides, "
-                                 "a cleaner does not" % max_mb})
+            items.append(
+                {
+                    "rule": "large-untracked",
+                    "path": rel,
+                    "action": "keep",
+                    "bytes": _size(root / rel),
+                    "why": "untracked and larger than %d MB: a human decides, "
+                    "a cleaner does not" % max_mb,
+                }
+            )
 
     items.extend(_empty_dirs(root, planned_gone))
-    items.sort(key=lambda item: (item["action"] != "delete", item["rule"], item["path"]))
+    items.sort(
+        key=lambda item: (item["action"] != "delete", item["rule"], item["path"])
+    )
     return items
 
 
@@ -227,8 +290,9 @@ def _untracked_by_size(root: Path, tracked: Set[str], max_mb: int) -> List[str]:
     limit = max_mb * 1024 * 1024
     found: List[str] = []
     for base, dirnames, filenames in os.walk(root, topdown=True, followlinks=False):
-        dirnames[:] = [name for name in sorted(dirnames)
-                       if name not in (".git", STATE_DIR)]
+        dirnames[:] = [
+            name for name in sorted(dirnames) if name not in (".git", STATE_DIR)
+        ]
         for name in filenames:
             path = Path(base) / name
             rel = _rel(root, path)
@@ -268,19 +332,27 @@ def _empty_dirs(root: Path, planned_gone: Set[str]) -> List[Dict]:
         names = [name for name in filenames if _rel(root, base_path / name) not in gone]
         if names:
             continue
-        subdirs = [name for name in dirnames
-                   if _rel(root, base_path / name) not in gone]
+        subdirs = [
+            name for name in dirnames if _rel(root, base_path / name) not in gone
+        ]
         # A subdirectory that survived this pass and was itself reported empty
         # is already in `emptied`, so it counts as gone for its parent.
-        surviving = [name for name in subdirs
-                     if _rel(root, base_path / name) not in emptied]
+        surviving = [
+            name for name in subdirs if _rel(root, base_path / name) not in emptied
+        ]
         if surviving:
             continue
         emptied.add(rel)
-        found.append({"rule": "empty-directory", "path": rel, "action": "delete",
-                      "bytes": 0,
-                      "why": "holds nothing after this pass; an empty directory is "
-                             "left over from a move, never created on purpose"})
+        found.append(
+            {
+                "rule": "empty-directory",
+                "path": rel,
+                "action": "delete",
+                "bytes": 0,
+                "why": "holds nothing after this pass; an empty directory is "
+                "left over from a move, never created on purpose",
+            }
+        )
     return found
 
 
@@ -318,10 +390,17 @@ def apply(root: Path, items: Sequence[Dict]) -> Tuple[int, int, List[str]]:
         freed += size
         log.parent.mkdir(parents=True, exist_ok=True)
         with log.open("a", encoding="utf-8") as handle:
-            handle.write(json.dumps({"at": time.strftime("%Y-%m-%dT%H:%M:%SZ",
-                                                         time.gmtime()),
-                                     "path": item["path"], "rule": item["rule"],
-                                     "bytes": size}) + "\n")
+            handle.write(
+                json.dumps(
+                    {
+                        "at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
+                        "path": item["path"],
+                        "rule": item["rule"],
+                        "bytes": size,
+                    }
+                )
+                + "\n"
+            )
     return removed, freed, failures
 
 
@@ -354,16 +433,22 @@ def report(items: Sequence[Dict], applied: bool = False) -> str:
     deletes = [item for item in items if item["action"] == "delete"]
     keeps = [item for item in items if item["action"] != "delete"]
     for item in deletes:
-        lines.append("  delete  %-18s %-52s %9s  %s"
-                     % (item["rule"], item["path"], human(item["bytes"]), item["why"]))
+        lines.append(
+            "  delete  %-18s %-52s %9s  %s"
+            % (item["rule"], item["path"], human(item["bytes"]), item["why"])
+        )
     for item in keeps:
-        lines.append("  keep    %-18s %-52s %9s  %s"
-                     % (item["rule"], item["path"], human(item["bytes"]), item["why"]))
+        lines.append(
+            "  keep    %-18s %-52s %9s  %s"
+            % (item["rule"], item["path"], human(item["bytes"]), item["why"])
+        )
     reclaimable = sum(item["bytes"] for item in deletes)
     verdict = "reclaimed" if applied else "reclaimable"
     lines.append("")
-    lines.append("%d item(s) to remove, %s %s; %d kept (each with a reason)"
-                 % (len(deletes), human(reclaimable), verdict, len(keeps)))
+    lines.append(
+        "%d item(s) to remove, %s %s; %d kept (each with a reason)"
+        % (len(deletes), human(reclaimable), verdict, len(keeps))
+    )
     if not applied and deletes:
         lines.append("dry run: nothing was deleted. Re-run with --apply to act.")
     return "\n".join(lines)
@@ -372,17 +457,29 @@ def report(items: Sequence[Dict], applied: bool = False) -> str:
 def main(argv: Optional[Sequence[str]] = None) -> int:
     parser = argparse.ArgumentParser(
         description="Housekeeping for a repository: caches, leftovers, empty dirs, "
-                    "sweep state. Dry run unless --apply.")
+        "sweep state. Dry run unless --apply."
+    )
     parser.add_argument("--root", default=".")
-    parser.add_argument("--apply", action="store_true",
-                        help="actually delete; without it this is a report")
+    parser.add_argument(
+        "--apply",
+        action="store_true",
+        help="actually delete; without it this is a report",
+    )
     parser.add_argument("--json", action="store_true")
-    parser.add_argument("--state-days", type=int, default=DEFAULT_STATE_DAYS,
-                        help="sweep state older than this many days is disposable "
-                             "(default %d)" % DEFAULT_STATE_DAYS)
-    parser.add_argument("--max-mb", type=int, default=DEFAULT_MAX_MB,
-                        help="report an untracked file larger than this "
-                             "(default %d MB)" % DEFAULT_MAX_MB)
+    parser.add_argument(
+        "--state-days",
+        type=int,
+        default=DEFAULT_STATE_DAYS,
+        help="sweep state older than this many days is disposable "
+        "(default %d)" % DEFAULT_STATE_DAYS,
+    )
+    parser.add_argument(
+        "--max-mb",
+        type=int,
+        default=DEFAULT_MAX_MB,
+        help="report an untracked file larger than this "
+        "(default %d MB)" % DEFAULT_MAX_MB,
+    )
     args = parser.parse_args(argv)
 
     root = Path(args.root).resolve()
@@ -395,13 +492,25 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
     if args.apply:
         removed, freed, failures = apply(root, items)
     if args.json:
-        print(json.dumps({"root": str(root), "git_available": tracked is not None,
-                          "applied": bool(args.apply), "removed": removed,
-                          "bytes_freed": freed, "failures": failures,
-                          "items": items}, indent=1))
+        print(
+            json.dumps(
+                {
+                    "root": str(root),
+                    "git_available": tracked is not None,
+                    "applied": bool(args.apply),
+                    "removed": removed,
+                    "bytes_freed": freed,
+                    "failures": failures,
+                    "items": items,
+                },
+                indent=1,
+            )
+        )
     else:
-        print("housekeeping %s%s" % (root, "" if tracked is not None
-                                     else "  (git unreadable: caches only)"))
+        print(
+            "housekeeping %s%s"
+            % (root, "" if tracked is not None else "  (git unreadable: caches only)")
+        )
         print(report(items, applied=args.apply))
         if args.apply and removed:
             print("removed %d item(s), %s freed" % (removed, human(freed)))

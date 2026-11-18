@@ -44,7 +44,6 @@ sentinel itself could not run -- and 2 is never reported as OK.
 from __future__ import annotations
 
 import argparse
-import copy
 import json
 import re
 import sys

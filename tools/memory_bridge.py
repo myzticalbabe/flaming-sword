@@ -39,12 +39,11 @@ USAGE
     python tools/memory_bridge.py --command "python tools/recall.py --jsonl" --recall "x"
     python tools/memory_bridge.py --selftest
 """
+
 from __future__ import annotations
 
 import argparse
-import copy
 import json
-import os
 import shlex
 import subprocess
 import sys
@@ -79,6 +78,7 @@ _COMMAND_TIMEOUT = 20
 # --------------------------------------------------------------------------- #
 # Adapters
 # --------------------------------------------------------------------------- #
+
 
 def _read_jsonl(path: Path) -> Tuple[List[Dict[str, Any]], Optional[str]]:
     """Return (records, error). A malformed line is an error, not a skipped line."""
@@ -118,13 +118,16 @@ def _run_command(command: str) -> Tuple[List[Dict[str, Any]], Optional[str]]:
     if not argv:
         return [], "the command is empty"
     try:
-        completed = subprocess.run(argv, capture_output=True, text=True,
-                                   timeout=_COMMAND_TIMEOUT)
+        completed = subprocess.run(
+            argv, capture_output=True, text=True, timeout=_COMMAND_TIMEOUT
+        )
     except (OSError, subprocess.SubprocessError) as exc:
         return [], "the command could not run: %s" % exc
     if completed.returncode != 0:
         return [], "the command exited %d (stderr: %s)" % (
-            completed.returncode, (completed.stderr or "").strip()[:120])
+            completed.returncode,
+            (completed.stderr or "").strip()[:120],
+        )
     records: List[Dict[str, Any]] = []
     for number, line in enumerate((completed.stdout or "").splitlines(), 1):
         line = line.strip()
@@ -133,8 +136,11 @@ def _run_command(command: str) -> Tuple[List[Dict[str, Any]], Optional[str]]:
         try:
             record = json.loads(line)
         except ValueError:
-            return records, "stdout line %d is not JSON; the adapter contract is one " \
-                            "object per line" % number
+            return (
+                records,
+                "stdout line %d is not JSON; the adapter contract is one "
+                "object per line" % number,
+            )
         if not isinstance(record, dict):
             return records, "stdout line %d is not an object" % number
         records.append(record)
@@ -146,44 +152,80 @@ def probe(jsonl: Optional[str] = None, command: Optional[str] = None) -> Dict[st
     if command:
         records, error = _run_command(command)
         if error:
-            return {"state": UNMEMORED, "backend": "command", "reason": error,
-                    "records": 0}
-        return {"state": MEMORY, "backend": "command", "reason": "", "records": len(records)}
+            return {
+                "state": UNMEMORED,
+                "backend": "command",
+                "reason": error,
+                "records": 0,
+            }
+        return {
+            "state": MEMORY,
+            "backend": "command",
+            "reason": "",
+            "records": len(records),
+        }
     if jsonl:
         path = Path(jsonl)
         if not path.exists():
-            return {"state": UNMEMORED, "backend": "jsonl",
-                    "reason": "%s does not exist" % path, "records": 0}
+            return {
+                "state": UNMEMORED,
+                "backend": "jsonl",
+                "reason": "%s does not exist" % path,
+                "records": 0,
+            }
         records, error = _read_jsonl(path)
         if error:
-            return {"state": UNMEMORED, "backend": "jsonl", "reason": error,
-                    "records": len(records)}
-        return {"state": MEMORY, "backend": "jsonl", "reason": "", "records": len(records)}
-    return {"state": UNMEMORED, "backend": "none",
-            "reason": "no memory backend configured (--jsonl or --command); this is not "
-                      "the same as no lessons existing",
-            "records": 0}
+            return {
+                "state": UNMEMORED,
+                "backend": "jsonl",
+                "reason": error,
+                "records": len(records),
+            }
+        return {
+            "state": MEMORY,
+            "backend": "jsonl",
+            "reason": "",
+            "records": len(records),
+        }
+    return {
+        "state": UNMEMORED,
+        "backend": "none",
+        "reason": "no memory backend configured (--jsonl or --command); this is not "
+        "the same as no lessons existing",
+        "records": 0,
+    }
 
 
 # --------------------------------------------------------------------------- #
 # Recall
 # --------------------------------------------------------------------------- #
 
+
 def _haystack(record: Dict[str, Any]) -> str:
     fields = ("content", "lesson", "text", "summary", "title", "claim", "note")
     return " ".join(str(record.get(field) or "") for field in fields).lower()
 
 
-def recall(query: str, jsonl: Optional[str] = None, command: Optional[str] = None,
-           limit: int = 5) -> Dict[str, Any]:
+def recall(
+    query: str,
+    jsonl: Optional[str] = None,
+    command: Optional[str] = None,
+    limit: int = 5,
+) -> Dict[str, Any]:
     """Return {state, backend, reason, matches}. Matches carry their backend label."""
     state = probe(jsonl=jsonl, command=command)
     if state["state"] != MEMORY:
         return {**state, "matches": []}
-    records, error = (_run_command(command) if command else _read_jsonl(Path(jsonl or "")))
+    records, error = (
+        _run_command(command) if command else _read_jsonl(Path(jsonl or ""))
+    )
     if error:
-        return {"state": UNMEMORED, "backend": state["backend"], "reason": error,
-                "matches": []}
+        return {
+            "state": UNMEMORED,
+            "backend": state["backend"],
+            "reason": error,
+            "matches": [],
+        }
     terms = [t for t in str(query or "").lower().split() if len(t) > 2]
     scored: List[Tuple[int, Dict[str, Any]]] = []
     for record in records:
@@ -192,19 +234,36 @@ def recall(query: str, jsonl: Optional[str] = None, command: Optional[str] = Non
         if score:
             scored.append((score, record))
     scored.sort(key=lambda pair: pair[0], reverse=True)
-    matches = [{"score": score, "backend": state["backend"],
-                "content": str(record.get("content") or record.get("lesson")
-                               or record.get("text") or record)[:400]}
-               for score, record in scored[:limit]]
-    return {"state": MEMORY, "backend": state["backend"], "reason": "",
-            "matches": matches, "records": len(records)}
+    matches = [
+        {
+            "score": score,
+            "backend": state["backend"],
+            "content": str(
+                record.get("content")
+                or record.get("lesson")
+                or record.get("text")
+                or record
+            )[:400],
+        }
+        for score, record in scored[:limit]
+    ]
+    return {
+        "state": MEMORY,
+        "backend": state["backend"],
+        "reason": "",
+        "matches": matches,
+        "records": len(records),
+    }
 
 
 # --------------------------------------------------------------------------- #
 # Writing
 # --------------------------------------------------------------------------- #
 
-def _append(state_dir: Optional[str], filename: str, entry: Dict[str, Any]) -> Dict[str, Any]:
+
+def _append(
+    state_dir: Optional[str], filename: str, entry: Dict[str, Any]
+) -> Dict[str, Any]:
     directory = Path(state_dir) if state_dir else Path.cwd() / STATE_DAY_DIR
     directory.mkdir(parents=True, exist_ok=True)
     path = directory / filename
@@ -213,8 +272,13 @@ def _append(state_dir: Optional[str], filename: str, entry: Dict[str, Any]) -> D
     return {"path": str(path), "bytes": path.stat().st_size, "entry": entry}
 
 
-def record_lesson(content: str, kind: str = "lesson", tags: Optional[Sequence[str]] = None,
-                  trigger: str = "", state_dir: Optional[str] = None) -> Dict[str, Any]:
+def record_lesson(
+    content: str,
+    kind: str = "lesson",
+    tags: Optional[Sequence[str]] = None,
+    trigger: str = "",
+    state_dir: Optional[str] = None,
+) -> Dict[str, Any]:
     """Write a lesson to `.flaming_sword/lessons.jsonl`, which recall reads.
 
     WHY THIS EXISTS: the bridge could read a ledger and nothing ever wrote one, so every
@@ -232,20 +296,34 @@ def record_lesson(content: str, kind: str = "lesson", tags: Optional[Sequence[st
         records, _error = _read_jsonl(ledger)
         for record in records:
             if record.get("sha") == digits:
-                return {"path": str(ledger), "skipped": "duplicate", "sha": digits,
-                        "entry": record}
+                return {
+                    "path": str(ledger),
+                    "skipped": "duplicate",
+                    "sha": digits,
+                    "entry": record,
+                }
     from datetime import datetime, timezone
 
-    entry = {"sha": digits, "content": text, "kind": kind, "tags": list(tags or []),
-             "trigger": trigger,
-             "written_at": datetime.now(timezone.utc).strftime("%Y-%m-%d")}
+    entry = {
+        "sha": digits,
+        "content": text,
+        "kind": kind,
+        "tags": list(tags or []),
+        "trigger": trigger,
+        "written_at": datetime.now(timezone.utc).strftime("%Y-%m-%d"),
+    }
     written = _append(state_dir, LESSONS_FILE, entry)
     written["skipped"] = ""
     return written
 
 
-def record_verification(frame_id: str, command: str, exit_code: int,
-                        observed: str = "", state_dir: Optional[str] = None) -> Dict[str, Any]:
+def record_verification(
+    frame_id: str,
+    command: str,
+    exit_code: int,
+    observed: str = "",
+    state_dir: Optional[str] = None,
+) -> Dict[str, Any]:
     """Record whether the acceptance command was actually run, and with what result.
 
     A mismatch is written as a LESSON automatically. That is the authorship campaign in
@@ -253,16 +331,24 @@ def record_verification(frame_id: str, command: str, exit_code: int,
     without a human remembering to write it down.
     """
     verdict = "VERIFIED" if exit_code == 0 else "FAILED"
-    entry = {"frame_id": frame_id, "command": command, "exit_code": int(exit_code),
-             "observed": (observed or "")[:500], "verdict": verdict}
+    entry = {
+        "frame_id": frame_id,
+        "command": command,
+        "exit_code": int(exit_code),
+        "observed": (observed or "")[:500],
+        "verdict": verdict,
+    }
     written = _append(state_dir, VERIFICATIONS_FILE, entry)
     written["verdict"] = verdict
     if verdict == "FAILED":
         written["lesson"] = record_lesson(
-            "the acceptance command for frame %s exited %d: %s" % (frame_id, exit_code,
-                                                                  command),
-            kind="failed-verification", tags=["verification", "frame"],
-            trigger=command, state_dir=state_dir)
+            "the acceptance command for frame %s exited %d: %s"
+            % (frame_id, exit_code, command),
+            kind="failed-verification",
+            tags=["verification", "frame"],
+            trigger=command,
+            state_dir=state_dir,
+        )
     return written
 
 
@@ -294,6 +380,7 @@ def record(frame: Dict[str, Any], state_dir: Optional[str] = None) -> Dict[str, 
 # Controls
 # --------------------------------------------------------------------------- #
 
+
 def selftest() -> Tuple[int, List[str]]:
     lines: List[str] = []
     failures = 0
@@ -302,10 +389,16 @@ def selftest() -> Tuple[int, List[str]]:
         tmp_path = Path(tmp)
         lessons = tmp_path / LESSONS_FILE
         lessons.write_text(
-            json.dumps({"content": "a shard validator must refuse a stale state_sha256"})
-            + "\n" +
-            json.dumps({"content": "the defender's posture must state bytes_of_original"})
-            + "\n", encoding="utf-8")
+            json.dumps(
+                {"content": "a shard validator must refuse a stale state_sha256"}
+            )
+            + "\n"
+            + json.dumps(
+                {"content": "the defender's posture must state bytes_of_original"}
+            )
+            + "\n",
+            encoding="utf-8",
+        )
 
         state = probe(jsonl=str(lessons))
         if state["state"] == MEMORY and state["records"] == 2:
@@ -315,9 +408,14 @@ def selftest() -> Tuple[int, List[str]]:
             lines.append("FAIL jsonl backend: %s" % state)
 
         found = recall("shard validator state_sha256", jsonl=str(lessons))
-        if found["state"] == MEMORY and found["matches"] and \
-                found["matches"][0]["backend"] == "jsonl":
-            lines.append("PASS recall returns a labelled match (%d)" % len(found["matches"]))
+        if (
+            found["state"] == MEMORY
+            and found["matches"]
+            and found["matches"][0]["backend"] == "jsonl"
+        ):
+            lines.append(
+                "PASS recall returns a labelled match (%d)" % len(found["matches"])
+            )
         else:
             failures += 1
             lines.append("FAIL recall returned %s" % found)
@@ -338,8 +436,10 @@ def selftest() -> Tuple[int, List[str]]:
             lines.append("FAIL no configured backend reported %s" % nothing)
 
         # A failing command is an absence with a reason, not a silent zero.
-        broken = probe(command='%s -c "import sys; sys.exit(3)"'
-                       % sys.executable.replace("\\", "/"))
+        broken = probe(
+            command='%s -c "import sys; sys.exit(3)"'
+            % sys.executable.replace("\\", "/")
+        )
         if broken["state"] == UNMEMORED and "exited 3" in broken["reason"]:
             lines.append("PASS a command that exits 3 is UNMEMORED and names the code")
         else:
@@ -347,8 +447,9 @@ def selftest() -> Tuple[int, List[str]]:
             lines.append("FAIL failing command reported %s" % broken)
 
         # Unparseable output must not be read as an empty store.
-        noise = probe(command='%s -c "print(\'not json\')"'
-                      % sys.executable.replace("\\", "/"))
+        noise = probe(
+            command="%s -c \"print('not json')\"" % sys.executable.replace("\\", "/")
+        )
         if noise["state"] == UNMEMORED and "not JSON" in noise["reason"]:
             lines.append("PASS unparseable output is UNMEMORED, not zero lessons")
         else:
@@ -366,8 +467,10 @@ def selftest() -> Tuple[int, List[str]]:
             lines.append("FAIL a malformed line reported %s" % malformed)
 
         # The command adapter, working: two records in, two records out.
-        good_cmd = ('%s -c "import json;print(json.dumps({\'content\':\'a lesson\'}))"'
-                    % sys.executable.replace("\\", "/"))
+        good_cmd = (
+            "%s -c \"import json;print(json.dumps({'content':'a lesson'}))\""
+            % sys.executable.replace("\\", "/")
+        )
         good = probe(command=good_cmd)
         if good["state"] == MEMORY and good["records"] == 1:
             lines.append("PASS the command adapter reads one JSON line")
@@ -376,19 +479,26 @@ def selftest() -> Tuple[int, List[str]]:
             lines.append("FAIL the command adapter reported %s" % good)
 
         # Writing: append-only, and readable back through the same reader.
-        frame = {"intent": "refuse a stale hash", "target": "x.py", "defends": ["y"],
-                 "shape": "defensive-v1"}
+        frame = {
+            "intent": "refuse a stale hash",
+            "target": "x.py",
+            "defends": ["y"],
+            "shape": "defensive-v1",
+        }
         wrote = record(frame, state_dir=str(tmp_path))
         again = record(frame, state_dir=str(tmp_path))
         path = Path(wrote["path"])
         records, error = _read_jsonl(path)
         if error or len(records) != 2:
             failures += 1
-            lines.append("FAIL frames did not append (%s, %d records)"
-                         % (error, len(records)))
+            lines.append(
+                "FAIL frames did not append (%s, %d records)" % (error, len(records))
+            )
         else:
-            lines.append("PASS frames append and read back (%d records, %d bytes)"
-                         % (len(records), again["bytes"]))
+            lines.append(
+                "PASS frames append and read back (%d records, %d bytes)"
+                % (len(records), again["bytes"])
+            )
 
     return failures, lines
 
@@ -397,9 +507,11 @@ def selftest() -> Tuple[int, List[str]]:
 # CLI
 # --------------------------------------------------------------------------- #
 
+
 def main(argv: Optional[Sequence[str]] = None) -> int:
     parser = argparse.ArgumentParser(
-        description="The defender's memory bridge, with its absence stated.")
+        description="The defender's memory bridge, with its absence stated."
+    )
     parser.add_argument("--probe", action="store_true")
     parser.add_argument("--recall", metavar="QUERY", default=None)
     parser.add_argument("--jsonl", default=None)
@@ -418,8 +530,10 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
             for line in lines:
                 print(line)
             print("")
-            print("SELFTEST %s (%d control(s), %d failure(s))"
-                  % ("OK" if not failures else "FAILED", len(lines), failures))
+            print(
+                "SELFTEST %s (%d control(s), %d failure(s))"
+                % ("OK" if not failures else "FAILED", len(lines), failures)
+            )
         return 0 if not failures else 1
 
     if args.probe:
@@ -444,8 +558,10 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
             if result.get(key):
                 print("  %s: %s" % (key, result[key]))
         for match in result.get("matches") or []:
-            print("  [%s score=%d] %s" % (match["backend"], match["score"],
-                                          match["content"][:160]))
+            print(
+                "  [%s score=%d] %s"
+                % (match["backend"], match["score"], match["content"][:160])
+            )
     # UNMEMORED is not a failure of the command, it is a state a caller must see.
     return 0
 

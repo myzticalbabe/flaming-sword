@@ -15,16 +15,15 @@ import json
 import sys
 from pathlib import Path
 
-import pytest
-
 HERE = Path(__file__).resolve().parents[1]
 if str(HERE / "tools") not in sys.path:
     sys.path.insert(0, str(HERE / "tools"))
 
 
 def _load(filename: str, module_name: str):
-    spec = importlib.util.spec_from_file_location(module_name,
-                                                  HERE / "tools" / filename)
+    spec = importlib.util.spec_from_file_location(
+        module_name, HERE / "tools" / filename
+    )
     assert spec and spec.loader
     module = importlib.util.module_from_spec(spec)
     sys.modules[module_name] = module
@@ -53,6 +52,7 @@ def good_frame(**overrides):
 # --------------------------------------------------------------------------- #
 # The healthy direction
 # --------------------------------------------------------------------------- #
+
 
 def test_a_good_frame_is_accepted_and_renders():
     frame = good_frame()
@@ -83,6 +83,7 @@ def test_preservation_frame_carries_posture():
 # --------------------------------------------------------------------------- #
 # Refusals
 # --------------------------------------------------------------------------- #
+
 
 def test_no_defence_is_refused():
     frame = good_frame(defends=[])
@@ -138,6 +139,7 @@ def test_posture_citing_an_unregistered_authority_is_refused():
 # Draft vs frame
 # --------------------------------------------------------------------------- #
 
+
 def test_draft_marks_every_hole():
     skeleton = defender.draft("convert a cartridge", "<cartridge>", preserve=True)
     assert skeleton["prompt"].count("<<FILL:") >= len(skeleton["unfilled"])
@@ -146,7 +148,9 @@ def test_draft_marks_every_hole():
 
 def test_strict_checker_refuses_a_draft():
     skeleton = defender.draft("convert a cartridge", "<cartridge>")
-    strict = {k: v for k, v in skeleton.items() if k not in ("prompt", "draft", "unfilled")}
+    strict = {
+        k: v for k, v in skeleton.items() if k not in ("prompt", "draft", "unfilled")
+    }
     assert defender.problems_in(strict)
 
 
@@ -154,14 +158,19 @@ def test_strict_checker_refuses_a_draft():
 # The tool's own controls
 # --------------------------------------------------------------------------- #
 
+
 def test_selftest_passes():
     failures, lines = defender.selftest()
     assert failures == 0, "\n".join(lines)
 
 
 def test_the_cli_refuses_a_frame_missing_its_evidence():
-    assert defender.main(["--intent", "delete the dead detector",
-                          "--target", "tools/sword.py"]) == 1
+    assert (
+        defender.main(
+            ["--intent", "delete the dead detector", "--target", "tools/sword.py"]
+        )
+        == 1
+    )
 
 
 def test_the_cli_emits_a_draft_without_evidence():

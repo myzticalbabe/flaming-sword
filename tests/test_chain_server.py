@@ -11,7 +11,6 @@ The properties that matter are refusals, not features:
 
 from __future__ import annotations
 
-import importlib.util
 import json
 import sys
 import threading
@@ -59,7 +58,9 @@ def model_server():
             length = int(self.headers.get("Content-Length") or 0)
             body = json.loads(self.rfile.read(length).decode("utf-8"))
             Stub.calls.append(body)
-            out = json.dumps({"choices": [{"message": {"content": "STUB ANSWER"}}]}).encode()
+            out = json.dumps(
+                {"choices": [{"message": {"content": "STUB ANSWER"}}]}
+            ).encode()
             self.send_response(200)
             self.send_header("Content-Type", "application/json")
             self.send_header("Content-Length", str(len(out)))
@@ -76,8 +77,11 @@ def model_server():
 
 def post(base: str, path: str, payload: dict):
     request = urllib.request.Request(
-        base + path, data=json.dumps(payload).encode("utf-8"),
-        headers={"Content-Type": "application/json"}, method="POST")
+        base + path,
+        data=json.dumps(payload).encode("utf-8"),
+        headers={"Content-Type": "application/json"},
+        method="POST",
+    )
     try:
         with urllib.request.urlopen(request, timeout=20) as response:
             return response.status, json.loads(response.read())
@@ -106,6 +110,7 @@ GOOD = {
 # Health, and the absence it reports
 # --------------------------------------------------------------------------- #
 
+
 def test_health_says_there_is_no_model(server: str) -> None:
     status, body = get(server, "/health")
     assert status == 200
@@ -117,7 +122,9 @@ def test_ask_without_a_model_is_503_not_an_echo(server: str) -> None:
     status, body = post(server, "/ask", GOOD)
     assert status == 503
     assert body["state"] == "NO-MODEL"
-    assert "does not have a model" in body["reason"] or "no --model-url" in body["reason"]
+    assert (
+        "does not have a model" in body["reason"] or "no --model-url" in body["reason"]
+    )
     assert "answer" not in body
 
 
@@ -125,8 +132,10 @@ def test_ask_without_a_model_is_503_not_an_echo(server: str) -> None:
 # The frame and the sentinel, in front of every answer
 # --------------------------------------------------------------------------- #
 
-def test_aio_returns_an_instruction_object_and_writes_the_frame(server: str,
-                                                               state: str) -> None:
+
+def test_aio_returns_an_instruction_object_and_writes_the_frame(
+    server: str, state: str
+) -> None:
     status, body = post(server, "/aio", GOOD)
     assert status == 200, body
     assert "AIO  defensive-aio-v1" in body["aio"]
@@ -153,7 +162,10 @@ def test_a_ghost_target_is_blocked_by_the_sentinel(server: str) -> None:
 # The model: a transport, never an authority
 # --------------------------------------------------------------------------- #
 
-def test_ask_reaches_a_stub_model_and_never_claims_verified(model_server, state: str) -> None:
+
+def test_ask_reaches_a_stub_model_and_never_claims_verified(
+    model_server, state: str
+) -> None:
     url, stub = model_server
     httpd = cs.make_server(port=0, state_dir=state, model_url=url, model_name="stub")
     thread = threading.Thread(target=httpd.serve_forever, daemon=True)
@@ -176,25 +188,36 @@ def test_ask_reaches_a_stub_model_and_never_claims_verified(model_server, state:
 # Verification, and the lesson it writes
 # --------------------------------------------------------------------------- #
 
+
 def test_verify_records_success_without_a_lesson(server: str, state: str) -> None:
-    status, body = post(server, "/verify", {"frame_id": "f-abc", "command": "pytest -q",
-                                            "exit_code": 0})
+    status, body = post(
+        server, "/verify", {"frame_id": "f-abc", "command": "pytest -q", "exit_code": 0}
+    )
     assert status == 200
     assert body["verdict"] == "VERIFIED"
     assert body["lesson"] == "not needed"
     assert not (Path(state) / bridge.LESSONS_FILE).exists()
 
 
-def test_verify_records_failure_and_writes_a_recallable_lesson(server: str,
-                                                              state: str) -> None:
-    status, body = post(server, "/verify", {"frame_id": "f-abc", "command": "pytest -q",
-                                            "exit_code": 1,
-                                            "observed": "2 failed, 96 passed"})
+def test_verify_records_failure_and_writes_a_recallable_lesson(
+    server: str, state: str
+) -> None:
+    status, body = post(
+        server,
+        "/verify",
+        {
+            "frame_id": "f-abc",
+            "command": "pytest -q",
+            "exit_code": 1,
+            "observed": "2 failed, 96 passed",
+        },
+    )
     assert status == 200
     assert body["verdict"] == "FAILED"
     assert body["lesson"] == "written"
-    found = bridge.recall("acceptance command exited", jsonl=str(
-        Path(state) / bridge.LESSONS_FILE))
+    found = bridge.recall(
+        "acceptance command exited", jsonl=str(Path(state) / bridge.LESSONS_FILE)
+    )
     assert found["state"] == bridge.MEMORY
     assert found["matches"], "the failed verification is not recallable"
 
@@ -209,15 +232,20 @@ def test_verify_refuses_without_a_frame_or_command(server: str) -> None:
 # The loop the user did not know was empty
 # --------------------------------------------------------------------------- #
 
+
 def test_the_lesson_ledger_is_written_by_the_chain_itself(state: str) -> None:
     """Before this, nothing wrote lessons.jsonl, so every run was UNMEMORED."""
     written = bridge.record_lesson(
         "a golden run that does not reproduce must be refused, not rebaselined",
-        kind="lesson", trigger="verify", state_dir=state)
+        kind="lesson",
+        trigger="verify",
+        state_dir=state,
+    )
     assert Path(written["path"]).exists()
     again = bridge.record_lesson(
         "a golden run that does not reproduce must be refused, not rebaselined",
-        state_dir=state)
+        state_dir=state,
+    )
     assert again["skipped"] == "duplicate"
     found = bridge.recall("golden run reproduce", jsonl=written["path"])
     assert found["state"] == bridge.MEMORY and found["matches"]

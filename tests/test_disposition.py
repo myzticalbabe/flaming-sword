@@ -6,6 +6,7 @@ the properties that make it usable a day later: distinct errors stay distinct, a
 repeat is counted rather than duplicated, a recurrence after a decision is a new
 fact, and a closed task cannot be closed twice into two different stories.
 """
+
 import importlib.util
 import json
 import subprocess
@@ -28,20 +29,28 @@ def repo(tmp_path):
     root = tmp_path / "repo"
     root.mkdir()
     subprocess.run(["git", "init", "-q"], cwd=str(root), check=True, timeout=120)
-    subprocess.run(["git", "config", "user.email", "t@example.invalid"], cwd=str(root),
-                   timeout=60)
+    subprocess.run(
+        ["git", "config", "user.email", "t@example.invalid"], cwd=str(root), timeout=60
+    )
     subprocess.run(["git", "config", "user.name", "t"], cwd=str(root), timeout=60)
     (root / sword.STATE_DIR).mkdir()
     (root / sword.STATE_DIR / "config.json").write_text(
-        json.dumps({"constants": []}), encoding="utf-8")
+        json.dumps({"constants": []}), encoding="utf-8"
+    )
     return root
 
 
 # -- one error, one task -----------------------------------------------------
 
+
 def test_an_error_becomes_one_task(repo):
-    row = disposition.record(repo, "scan", "detector-unrun", "stale-claims",
-                             "stale-claims could not run: no claims.command")
+    row = disposition.record(
+        repo,
+        "scan",
+        "detector-unrun",
+        "stale-claims",
+        "stale-claims could not run: no claims.command",
+    )
     assert row["id"] == "t-0001"
     assert row["status"] == "open" and row["seen"] == 1
     assert row["stage"] == "scan" and row["kind"] == "detector-unrun"
@@ -50,7 +59,9 @@ def test_an_error_becomes_one_task(repo):
 
 def test_two_different_errors_are_two_tasks(repo):
     first = disposition.record(repo, "scan", "detector-unrun", "stale-claims", "a")
-    second = disposition.record(repo, "scan", "detector-unrun", "duplicate-constant", "b")
+    second = disposition.record(
+        repo, "scan", "detector-unrun", "duplicate-constant", "b"
+    )
     assert {first["id"], second["id"]} == {"t-0001", "t-0002"}
     assert len(disposition.tasks(repo)) == 2
 
@@ -69,31 +80,45 @@ def test_the_same_error_twice_is_counted_not_duplicated(repo):
 def test_the_same_message_with_a_changing_count_stays_one_task(repo):
     """Identity is stage+kind+subject, never the message: a count inside the
     message changes while the defect does not."""
-    disposition.record(repo, "fix", "fix-failed", "two-interpreters:abc", "3 item(s) failed")
-    row = disposition.record(repo, "fix", "fix-failed", "two-interpreters:abc",
-                             "4 item(s) failed")
+    disposition.record(
+        repo, "fix", "fix-failed", "two-interpreters:abc", "3 item(s) failed"
+    )
+    row = disposition.record(
+        repo, "fix", "fix-failed", "two-interpreters:abc", "4 item(s) failed"
+    )
     assert len(disposition.tasks(repo)) == 1
     assert row["seen"] == 2
 
 
 # -- disposition -------------------------------------------------------------
 
+
 def test_a_disposed_task_leaves_the_open_list_and_keeps_its_reason(repo):
-    row = disposition.record(repo, "scan", "detector-unrun", "stale-claims", "no ledger")
-    closed = disposition.dispose(repo, row["id"], "wontfix", "the ledger is being rebuilt")
+    row = disposition.record(
+        repo, "scan", "detector-unrun", "stale-claims", "no ledger"
+    )
+    closed = disposition.dispose(
+        repo, row["id"], "wontfix", "the ledger is being rebuilt"
+    )
     assert closed["status"] == "disposed"
     assert closed["disposition"] == "wontfix"
     assert closed["note"] == "the ledger is being rebuilt"
     assert closed["disposed_at"]
     assert disposition.tasks(repo) == []
-    assert [item["id"] for item in disposition.tasks(repo, include_disposed=True)] == [row["id"]]
+    assert [item["id"] for item in disposition.tasks(repo, include_disposed=True)] == [
+        row["id"]
+    ]
 
 
 def test_a_recurrence_after_a_decision_is_a_new_task(repo):
     """The error came back, so it is a new fact about the tree, not a new opinion."""
-    first = disposition.record(repo, "scan", "detector-unrun", "stale-claims", "no ledger")
+    first = disposition.record(
+        repo, "scan", "detector-unrun", "stale-claims", "no ledger"
+    )
     disposition.dispose(repo, first["id"], "fixed", "added the ledger")
-    second = disposition.record(repo, "scan", "detector-unrun", "stale-claims", "no ledger")
+    second = disposition.record(
+        repo, "scan", "detector-unrun", "stale-claims", "no ledger"
+    )
     assert second["id"] != first["id"]
     assert second["identity"] == first["identity"]
     assert [item["id"] for item in disposition.tasks(repo)] == [second["id"]]
@@ -117,6 +142,7 @@ def test_an_invalid_disposition_is_refused(repo):
 
 
 # -- wired into the sweep ----------------------------------------------------
+
 
 def test_a_crashing_detector_is_recorded_as_a_task(repo, monkeypatch):
     def exploding(_root):
@@ -158,8 +184,11 @@ def test_a_second_scan_does_not_multiply_the_same_unrun(repo):
 
 # -- the CLI ----------------------------------------------------------------
 
+
 def test_the_cli_lists_open_tasks(repo, capsys):
-    disposition.record(repo, "scan", "detector-unrun", "stale-claims", "no claims company")
+    disposition.record(
+        repo, "scan", "detector-unrun", "stale-claims", "no claims company"
+    )
     assert sword.main(["--root", str(repo), "--tasks"]) == 0
     out = capsys.readouterr().out
     assert "t-0001" in out and "stale-claims" in out
@@ -173,8 +202,21 @@ def test_the_cli_refuses_dispose_without_a_decision(repo, capsys):
 
 def test_the_cli_disposes_and_the_task_leaves_the_queue(repo, capsys):
     row = disposition.record(repo, "scan", "detector-unrun", "x", "y")
-    assert sword.main(["--root", str(repo), "--dispose", row["id"], "--as", "duplicate",
-                       "--note", "same as t-0001"]) == 0
+    assert (
+        sword.main(
+            [
+                "--root",
+                str(repo),
+                "--dispose",
+                row["id"],
+                "--as",
+                "duplicate",
+                "--note",
+                "same as t-0001",
+            ]
+        )
+        == 0
+    )
     assert disposition.tasks(repo) == []
     assert "disposed" in capsys.readouterr().out
 

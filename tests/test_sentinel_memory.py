@@ -15,8 +15,6 @@ import json
 import sys
 from pathlib import Path
 
-import pytest
-
 HERE = Path(__file__).resolve().parents[1]
 TOOLS = HERE / "tools"
 if str(TOOLS) not in sys.path:
@@ -52,6 +50,7 @@ GOOD = dict(
 # Sentinel
 # --------------------------------------------------------------------------- #
 
+
 def test_a_resolvable_action_is_allowed():
     verdict = sentinel.check(**GOOD)
     assert verdict["verdict"] == "SENTINEL OK"
@@ -85,7 +84,8 @@ def test_a_prose_break_list_is_blocked():
 
 def test_a_placeholder_defence_is_blocked():
     verdict = sentinel.check(
-        **{**GOOD, "defends": ["<name what survives: a test, a claim, a gate>"]})
+        **{**GOOD, "defends": ["<name what survives: a test, a claim, a gate>"]}
+    )
     assert any("placeholder" in p for p in verdict["problems"])
 
 
@@ -103,6 +103,7 @@ def test_selftest_passes():
 # Memory bridge
 # --------------------------------------------------------------------------- #
 
+
 def test_no_backend_is_unmemored_with_a_reason():
     state = bridge.probe()
     assert state["state"] == bridge.UNMEMORED
@@ -117,8 +118,10 @@ def test_a_missing_ledger_is_unmemored_not_empty():
 
 def test_recall_labels_its_backend(tmp_path: Path):
     ledger = tmp_path / "lessons.jsonl"
-    ledger.write_text(json.dumps({"content": "a stale state_sha256 must be refused"}) + "\n",
-                      encoding="utf-8")
+    ledger.write_text(
+        json.dumps({"content": "a stale state_sha256 must be refused"}) + "\n",
+        encoding="utf-8",
+    )
     found = bridge.recall("stale state_sha256", jsonl=str(ledger))
     assert found["state"] == bridge.MEMORY
     assert found["matches"][0]["backend"] == "jsonl"
@@ -133,10 +136,15 @@ def test_a_malformed_ledger_line_is_an_error(tmp_path: Path):
 
 
 def test_frames_append(tmp_path: Path):
-    wrote = bridge.record({"intent": "x", "shape": "defensive-v1"}, state_dir=str(tmp_path))
+    wrote = bridge.record(
+        {"intent": "x", "shape": "defensive-v1"}, state_dir=str(tmp_path)
+    )
     bridge.record({"intent": "y", "shape": "defensive-v1"}, state_dir=str(tmp_path))
     path = Path(wrote["path"])
-    assert len([line for line in path.read_text(encoding="utf-8").splitlines() if line]) == 2
+    assert (
+        len([line for line in path.read_text(encoding="utf-8").splitlines() if line])
+        == 2
+    )
 
 
 def test_bridge_selftest_passes():
@@ -147,6 +155,7 @@ def test_bridge_selftest_passes():
 # --------------------------------------------------------------------------- #
 # AIO
 # --------------------------------------------------------------------------- #
+
 
 def aio_kwargs(**overrides):
     kwargs = dict(
@@ -162,46 +171,64 @@ def aio_kwargs(**overrides):
 
 
 def test_a_complete_prompt_becomes_an_instruction_object():
-    result = defender.to_aio("refuse a shard whose golden run does not reproduce",
-                             **aio_kwargs())
+    result = defender.to_aio(
+        "refuse a shard whose golden run does not reproduce", **aio_kwargs()
+    )
     assert result["state"] == "READY-UNMEMORED"
     assert "AIO  defensive-aio-v1" in result["aio"]
     assert "USER PROMPT (verbatim, and it governs)" in result["aio"]
 
 
 def test_unmemored_is_explained_rather_than_implied():
-    result = defender.to_aio("refuse a shard whose golden run does not reproduce",
-                             **aio_kwargs())
+    result = defender.to_aio(
+        "refuse a shard whose golden run does not reproduce", **aio_kwargs()
+    )
     assert "NOT an absence of lessons" in result["aio"]
 
 
 def test_a_ghost_target_renders_no_prompt():
-    result = defender.to_aio("refuse a shard whose golden run does not reproduce",
-                             **aio_kwargs(target="tools/ghost.py"))
+    result = defender.to_aio(
+        "refuse a shard whose golden run does not reproduce",
+        **aio_kwargs(target="tools/ghost.py"),
+    )
     assert result["state"] == "BLOCKED"
     assert result["aio"] == ""
 
 
 def test_no_finish_line_renders_no_prompt():
-    result = defender.to_aio("refuse a shard whose golden run does not reproduce",
-                             **aio_kwargs(acceptance=""))
+    result = defender.to_aio(
+        "refuse a shard whose golden run does not reproduce",
+        **aio_kwargs(acceptance=""),
+    )
     assert result["state"] == "REFUSED"
     assert result["aio"] == ""
 
 
 def test_recalled_lessons_reach_the_prompt():
-    memory = {"state": "MEMORY", "backend": "jsonl",
-              "matches": [{"backend": "jsonl", "score": 1,
-                           "content": "a stale state_sha256 must be refused"}]}
-    result = defender.to_aio("refuse a shard whose golden run does not reproduce",
-                             memory=memory, **aio_kwargs())
+    memory = {
+        "state": "MEMORY",
+        "backend": "jsonl",
+        "matches": [
+            {
+                "backend": "jsonl",
+                "score": 1,
+                "content": "a stale state_sha256 must be refused",
+            }
+        ],
+    }
+    result = defender.to_aio(
+        "refuse a shard whose golden run does not reproduce",
+        memory=memory,
+        **aio_kwargs(),
+    )
     assert result["state"] == "READY"
     assert "stale state_sha256" in result["aio"]
 
 
 def test_the_aio_carries_the_posture_for_preservation_work():
-    result = defender.to_aio("convert the cartridge into a rules shard",
-                             **aio_kwargs(preserve=True))
+    result = defender.to_aio(
+        "convert the cartridge into a rules shard", **aio_kwargs(preserve=True)
+    )
     assert result["state"] in ("READY", "READY-UNMEMORED")
     assert "POSTURE" in result["aio"]
     assert "bytes of the original: 0" in result["aio"]

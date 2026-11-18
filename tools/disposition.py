@@ -25,6 +25,7 @@ opinion.
 The failure this avoids is the opposite one, and it is worse: an error that is
 seen and not written is an error nobody disposes of.
 """
+
 from __future__ import annotations
 
 import hashlib
@@ -62,8 +63,10 @@ def read(root: Path) -> List[Dict]:
 def write(root: Path, rows: List[Dict]) -> None:
     path = ledger_path(root)
     path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text("".join(json.dumps(row, ensure_ascii=False) + "\n" for row in rows),
-                    encoding="utf-8")
+    path.write_text(
+        "".join(json.dumps(row, ensure_ascii=False) + "\n" for row in rows),
+        encoding="utf-8",
+    )
 
 
 def _now() -> str:
@@ -77,8 +80,15 @@ def identity(stage: str, kind: str, subject: str) -> str:
     return hashlib.sha1(raw.encode("utf-8")).hexdigest()[:12]
 
 
-def record(root: Path, stage: str, kind: str, subject: str, what: str,
-           evidence: str = "", remedy: str = "") -> Dict:
+def record(
+    root: Path,
+    stage: str,
+    kind: str,
+    subject: str,
+    what: str,
+    evidence: str = "",
+    remedy: str = "",
+) -> Dict:
     """Record one error as one task, now. Returns the row (new or bumped)."""
     rows = read(root)
     ident = identity(stage, kind, subject)
@@ -94,8 +104,14 @@ def record(root: Path, stage: str, kind: str, subject: str, what: str,
                 row["remedy"] = remedy
             write(root, rows)
             return row
-    next_number = 1 + max((int(row["id"].split("-")[1]) for row in rows
-                           if row.get("id", "").startswith("t-")), default=0)
+    next_number = 1 + max(
+        (
+            int(row["id"].split("-")[1])
+            for row in rows
+            if row.get("id", "").startswith("t-")
+        ),
+        default=0,
+    )
     row = {
         "id": "t-%04d" % next_number,
         "identity": ident,
@@ -125,8 +141,9 @@ def tasks(root: Path, include_disposed: bool = False) -> List[Dict]:
     return [row for row in rows if row.get("status") == "open"]
 
 
-def dispose(root: Path, task_id: str, disposition: str,
-            note: str = "") -> Optional[Dict]:
+def dispose(
+    root: Path, task_id: str, disposition: str, note: str = ""
+) -> Optional[Dict]:
     """Close one task with a disposition. The caller decides; the ledger records."""
     if disposition not in DISPOSITIONS:
         raise ValueError("disposition must be one of %s" % ", ".join(DISPOSITIONS))
@@ -144,16 +161,19 @@ def dispose(root: Path, task_id: str, disposition: str,
     return None
 
 
-
 try:
     from CORE.failure_ledger import note_failure
-except ImportError:                               # never break the host
+except ImportError:  # never break the host
+
     def note_failure(where, exc=None):
         pass  # ledger missing; the swallow is still named at the call site
+
 
 def summary(root: Path) -> Dict[str, int]:
     counts: Dict[str, int] = {}
     for row in read(root):
-        key = row.get("status") if row.get("status") == "open" else row.get("disposition")
+        key = (
+            row.get("status") if row.get("status") == "open" else row.get("disposition")
+        )
         counts[key or "unknown"] = counts.get(key or "unknown", 0) + 1
     return counts
