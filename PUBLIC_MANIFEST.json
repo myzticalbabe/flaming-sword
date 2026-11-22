@@ -3,7 +3,7 @@
   "version": "0.1.0",
   "description": "Flaming Sword: Cryptographic Verification Tool extracted from AZAZAEL",
   "repository": "https://github.com/myzticalbabe/flaming-sword",
-  "license": "CDDL-1.1",
+  "license": "LicenseRef-SoulForge-1.0",
   "authors": [
     {
       "name": "Azazael Contributors",
