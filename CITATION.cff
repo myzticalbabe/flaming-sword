@@ -25,7 +25,7 @@ keywords:
   - "merkle"
   - "signature"
   - "integrity"
-license: "CDDL-1.1"
+license: "LicenseRef-SoulForge-1.0"
 repository: "https://github.com/myzticalbabe/flaming-sword"
 repository-code: "https://github.com/myzticalbabe/flaming-sword"
 repository-artifact: "https://pypi.org/project/flaming-sword/"
